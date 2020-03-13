@@ -1,6 +1,11 @@
+#include <couchit/config.h>
+#include <couchit/couchDB.h>
+#include <imtjson/jwtcrypto.h>
 #include <rpc/rpcServer.h>
 #include <imtjson/rpc.h>
+#include <main/rpcinterface.h>
 #include <main/sendmail.h>
+#include <openssl/sha.h>
 #include <shared/default_app.h>
 #include <shared/logOutput.h>
 #include <shared/stringview.h>
@@ -8,7 +13,9 @@
 #include <simpleServer/address.h>
 #include <simpleServer/asyncProvider.h>
 #include <simpleServer/threadPoolAsync.h>
+#include <memory>
 
+using couchit::CouchDB;
 using json::RpcRequest;
 using ondra_shared::DefaultApp;
 using ondra_shared::logDebug;
@@ -28,13 +35,33 @@ public:
 	App():DefaultApp({},std::cerr) {}
 	virtual void showHelp(const std::initializer_list<Switch> &defsw) override;
 	int run(ServiceControl &cntr, ArgList);
+
 };
+
+std::shared_ptr<CouchDB> initDB(const ondra_shared::IniConfig::Section &s) {
+	couchit::Config cfg;
+	cfg.baseUrl = s.mandatory["url"].getString();
+	cfg.databaseName = s.mandatory["name"].getString();
+	cfg.authInfo.username = s.mandatory["login"].getString();
+	cfg.authInfo.password = s.mandatory["password"].getString();
+	return std::make_shared<CouchDB>(cfg);
+}
+
+using PECKey = std::unique_ptr<EC_KEY, decltype(&EC_KEY_free)>;
+PECKey initKey(const ondra_shared::IniConfig::Section &s) {
+	auto secret = s.mandatory["secret"].getString();
+	unsigned char key[SHA256_DIGEST_LENGTH];
+	SHA256(reinterpret_cast<const unsigned char *>(secret.data), secret.length,key);
+	return PECKey(json::JWTCrypto_ES::importPrivateKey(256,BinaryView(key, sizeof(key))), &EC_KEY_free);
+}
 
 int App::run(ServiceControl &cntr, ArgList) {
 	auto section_server = config["server"];
 	cntr.changeUser(section_server["user"].getString());
 	cntr.enableRestart();
 
+	auto db = initDB(config["database"]);
+	PECKey pkey = initKey(config["private_key"]);
 
 	SendMail sendmail(config["sendmail"].mandatory["path"].getPath());
 
@@ -45,17 +72,20 @@ int App::run(ServiceControl &cntr, ArgList) {
                     std::max<unsigned int>(1,section_server.mandatory["threads"].getUInt()),
                     std::max<unsigned int>(1,section_server["dispatchers"].getUInt(1)));
 
+    RpcInterface rpcInterface({sendmail});
+
     logProgress("Initializing server");
     RpcHttpServer server(bind_addr, asyncProvider);
     server.addRPCPath("/RPC");
     server.add_ping();
     server.add_listMethods();
-    server.add("sendmail",[&](RpcRequest req) {
-    	StrViewA email = req.getArgs()[0].getString();
-    	StrViewA body = req.getArgs()[1].getString();
-    	sendmail.send(email, body);
-    	req.setResult(true);
+    server.addPath("/public_key",[&](simpleServer::HTTPRequest req, StrViewA ) {
+    	if (req.allowMethods({"GET"})) {
+    		req.sendResponse("text/plain",json::JWTCrypto_ES::exportPublicKey(pkey.get()));
+    	}
+    	return true;
     });
+    rpcInterface.initRPC(server);
     server.start();
 
 	cntr.dispatch();
