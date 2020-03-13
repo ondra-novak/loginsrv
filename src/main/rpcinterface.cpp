@@ -12,6 +12,7 @@
 #include <openssl/hmac.h>
 #include <shared/stringview.h>
 #include "rpcinterface.h"
+#include "loginApple.h"
 #include <chrono>
 #include <memory>
 #include <sstream>
@@ -172,7 +173,13 @@ void RpcInterface::rpcLogin(json::RpcRequest req) {
 	case RpcInterface::facebook:
 		userdoc = loginFacebook(token, email);break;
 	case RpcInterface::apple:
-		userdoc = loginApple(token, email);break;
+		try {
+			email = getAppleAccountId(token);
+			userdoc = findUserByEMail(email.getString());
+		} catch (std::exception &e) {
+			return req.setError(403, e.what());
+		}
+		break;
 	case RpcInterface::google:
 		userdoc = loginGoogle(token, email);break;
 	}
@@ -187,7 +194,7 @@ void RpcInterface::rpcLogin(json::RpcRequest req) {
 		return req.setError(403,"Invalid credentials");
 	}
 
-	req.setResult(loginByDoc(userdoc, app,  exp));
+	setResultAndContext(req,loginByDoc(userdoc, app,  exp));
 }
 
 void RpcInterface::initNumIDSvc(std::shared_ptr<couchit::ChangesDistributor> chdist) {
@@ -259,6 +266,11 @@ void RpcInterface::rpcSetConsentPPD(json::RpcRequest req) {
 			}
 		}
 	}
+}
+
+void RpcInterface::setResultAndContext(json::RpcRequest req, json::Value loginData) {
+	Value context = Object("session", loginData["session"]);
+	req.setResult(loginData, context);
 }
 
 Value RpcInterface::searchUser(const Value &srch) {
@@ -398,10 +410,6 @@ json::Value RpcInterface::loginFacebook(json::StrViewA token, json::Value &email
 	return token_rejected;
 }
 
-json::Value RpcInterface::loginApple(json::StrViewA token, json::Value &email) {
-	return token_rejected;
-}
-
 json::Value RpcInterface::loginGoogle(json::StrViewA token, json::Value &email) {
 	return token_rejected;
 }
@@ -462,7 +470,7 @@ void RpcInterface::rpcParseToken(json::RpcRequest req) {
 }
 
 void RpcInterface::rpcSignup(json::RpcRequest req) {
-	static Value arglist = Value(json::array,{"string"});
+	static Value arglist = {"string",{"boolean","undefined"}};
 	if (!req.checkArgs(arglist)) return req.setArgError();
 	Value token = parseJWT(req.getArgs()[0].getString(), jwt);
 	if (!token.hasValue()) return req.setError(401,"Token is not valid");
@@ -478,7 +486,8 @@ void RpcInterface::rpcSignup(json::RpcRequest req) {
 		Document doc = db->newDocument();
 		doc.set("email", email);
 		doc.set("first_app", app);
-		req.setResult(loginByDoc(trydoc, app, exp));
+		doc.set("cppd", req.getArgs()[1].getBool());
+		setResultAndContext(req,loginByDoc(trydoc, app, exp));
 	}
 
 

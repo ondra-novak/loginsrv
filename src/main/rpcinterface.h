@@ -71,7 +71,6 @@ protected:
 	json::Value loginEmail(json::StrViewA token, json::StrViewA email, json::StrViewA app);
 	json::Value loginToken(json::StrViewA token);
 	json::Value loginFacebook(json::StrViewA token, json::Value &email);
-	json::Value loginApple(json::StrViewA token, json::Value &email);
 	json::Value loginGoogle(json::StrViewA token, json::Value &email);
 
 
@@ -84,6 +83,7 @@ protected:
 	json::Value createSignupToken(json::Value content);
 	json::Value loginByDoc(couchit::Document &&doc, json::StrViewA app, int exp);
 
+	void setResultAndContext(json::RpcRequest req, json::Value loginData);
 private:
 	json::Value searchUser(const json::Value &srch);
 };
