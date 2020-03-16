@@ -20,9 +20,6 @@ public:
 		SendMail &sendmail;
 		json::PJWTCrypto jwt;
 		std::shared_ptr<couchit::CouchDB> db;
-		std::shared_ptr<couchit::ChangesDistributor> chdist;
-
-
 	};
 
 	enum Provider {
@@ -46,7 +43,7 @@ public:
 	void rpcLogin(json::RpcRequest req);
 	void rpcParseToken(json::RpcRequest req);
 	void rpcSignup(json::RpcRequest req);
-	void initNumIDSvc(std::shared_ptr<couchit::ChangesDistributor> chdist);
+	void initNumIDSvc(couchit::ChangesDistributor &chdist);
 	void rpcSetProfileData(json::RpcRequest req);
 	void rpcGetProfileData(json::RpcRequest req);
 	void rpcSetConsentPPD(json::RpcRequest req);

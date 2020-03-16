@@ -19,6 +19,7 @@ using couchit::CouchDB;
 using json::RpcRequest;
 using ondra_shared::DefaultApp;
 using ondra_shared::logDebug;
+using ondra_shared::logError;
 using ondra_shared::logFatal;
 using ondra_shared::logProgress;
 using ondra_shared::StrViewA;
@@ -61,7 +62,10 @@ int App::run(ServiceControl &cntr, ArgList) {
 	cntr.enableRestart();
 
 	auto db = initDB(config["database"]);
+	auto chdist = std::make_shared<couchit::ChangesDistributor>(*db);
 	PECKey pkey = initKey(config["private_key"]);
+	std::string pubkey = json::JWTCrypto_ES::exportPublicKeyPEM(pkey.get());
+    json::PJWTCrypto jwt = new json::JWTCrypto_ES(pkey.release(), 256);
 
 	SendMail sendmail(config["sendmail"].mandatory["path"].getPath());
 
@@ -72,7 +76,7 @@ int App::run(ServiceControl &cntr, ArgList) {
                     std::max<unsigned int>(1,section_server.mandatory["threads"].getUInt()),
                     std::max<unsigned int>(1,section_server["dispatchers"].getUInt(1)));
 
-    RpcInterface rpcInterface({sendmail});
+    RpcInterface rpcInterface(RpcInterface::Config{sendmail,jwt,db});
 
     logProgress("Initializing server");
     RpcHttpServer server(bind_addr, asyncProvider);
@@ -81,14 +85,21 @@ int App::run(ServiceControl &cntr, ArgList) {
     server.add_listMethods();
     server.addPath("/public_key",[&](simpleServer::HTTPRequest req, StrViewA ) {
     	if (req.allowMethods({"GET"})) {
-    		req.sendResponse("text/plain",json::JWTCrypto_ES::exportPublicKey(pkey.get()));
+    		req.sendResponse("text/plain",pubkey);
     	}
     	return true;
     });
     rpcInterface.initRPC(server);
+    chdist->runService([]{
+    		try {throw;} catch (std::exception &e) {
+    			logError("Exception in dispatcher: $1", e.what());
+    		}
+    		return true;
+    });
     server.start();
 
 	cntr.dispatch();
+	chdist->stopService();
 	return 0;
 
 }

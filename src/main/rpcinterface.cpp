@@ -42,7 +42,7 @@ function(doc) {
 )js";
 
 static Value userIndexDDoc = Object
-		("_id","_desig/userIndex")
+		("_id","_design/userIndex")
 		("language","javascript")
 		("views", Object
 				("userIndex", Object
@@ -197,8 +197,8 @@ void RpcInterface::rpcLogin(json::RpcRequest req) {
 	setResultAndContext(req,loginByDoc(userdoc, app,  exp));
 }
 
-void RpcInterface::initNumIDSvc(std::shared_ptr<couchit::ChangesDistributor> chdist) {
-	chdist->addFn([db=this->db](const couchit::ChangeEvent &ev) mutable {
+void RpcInterface::initNumIDSvc(couchit::ChangesDistributor &chdist) {
+	chdist.addFn([db=this->db](const couchit::ChangeEvent &ev) mutable {
 
 		if (!ev.doc["num_id"].hasValue()) {
 			std::size_t lastId = 0;
@@ -226,7 +226,7 @@ void RpcInterface::rpcSetProfileData(json::RpcRequest req) {
 		Value rev = req.getArgs()[0];
 		Value content = req.getArgs()[1];
 		if (doc.getRevValue() == rev) {
-			doc.set("profile", req.getArgs());
+			doc.set("profile", content);
 			try {
 				db->put(doc);
 				req.setResult(true);
@@ -357,16 +357,16 @@ json::Value RpcInterface::loginByDoc(couchit::Document &&doc, StrViewA app, int 
 	db->put(doc);
 	auto sesinfo = createSession(doc.getID(), exp, app, doc["admin"].getBool());
 	Value rfrtoken = createRefreshToken(doc.getID());
-	return (Object
+	return Object
 			("session", sesinfo.first)
 			("expiration", sesinfo.second)
 			("refresh", rfrtoken)
 			("num_id", doc["num_id"])
 			("profile", doc["profile"])
 			("cppd", doc["cppd"])
-			("config", json::object),
-			Object("session", sesinfo.first)
-	);
+			("email", doc["email"])
+			("config", json::object);
+
 
 }
 
@@ -472,7 +472,7 @@ void RpcInterface::rpcParseToken(json::RpcRequest req) {
 void RpcInterface::rpcSignup(json::RpcRequest req) {
 	static Value arglist = {"string",{"boolean","undefined"}};
 	if (!req.checkArgs(arglist)) return req.setArgError();
-	Value token = parseJWT(req.getArgs()[0].getString(), jwt);
+	Value token = checkJWTTime(parseJWT(req.getArgs()[0].getString(), jwt));
 	if (!token.hasValue()) return req.setError(401,"Token is not valid");
 	Value content = token["content"];
 	StrViewA email = content["email"].getString();
@@ -481,13 +481,13 @@ void RpcInterface::rpcSignup(json::RpcRequest req) {
 
 	Value trydoc = findUserByEMail(email);
 	if (trydoc.hasValue()) {
-		req.setResult(loginByDoc(trydoc, app, exp));
+		setResultAndContext(req,loginByDoc(trydoc, app, exp));
 	} else {
 		Document doc = db->newDocument();
 		doc.set("email", email);
 		doc.set("first_app", app);
 		doc.set("cppd", req.getArgs()[1].getBool());
-		setResultAndContext(req,loginByDoc(trydoc, app, exp));
+		setResultAndContext(req,loginByDoc(std::move(doc), app, exp));
 	}
 
 
