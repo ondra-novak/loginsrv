@@ -76,7 +76,7 @@ int App::run(ServiceControl &cntr, ArgList) {
                     std::max<unsigned int>(1,section_server.mandatory["threads"].getUInt()),
                     std::max<unsigned int>(1,section_server["dispatchers"].getUInt(1)));
 
-    RpcInterface rpcInterface(RpcInterface::Config{sendmail,jwt,db});
+    RpcInterface rpcInterface(RpcInterface::Config{sendmail,jwt,db,*chdist});
 
     logProgress("Initializing server");
     RpcHttpServer server(bind_addr, asyncProvider);
@@ -90,6 +90,11 @@ int App::run(ServiceControl &cntr, ArgList) {
     	return true;
     });
     rpcInterface.initRPC(server);
+
+    if (config["num_ids"]["enable"].getBool()) {
+    	rpcInterface.initNumIDSvc(*chdist);
+    }
+
     chdist->runService([]{
     		try {throw;} catch (std::exception &e) {
     			logError("Exception in dispatcher: $1", e.what());
