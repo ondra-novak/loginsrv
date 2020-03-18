@@ -651,8 +651,9 @@ std::pair<json::Value,std::uint64_t> RpcInterface::createSession(json::Value use
 			   ("iat", std::chrono::duration_cast<std::chrono::seconds>(tp.time_since_epoch()).count())
 			   ("exp", std::chrono::duration_cast<std::chrono::seconds>(e.time_since_epoch()).count())
 			   ("adm", admin)
-			   ("rls", roles)
+			   ("rls", roles.empty()?Value():roles)
 			   ("sub", "ses")
+			   ("iss", "adveri")
 			   ("app", app);
 	std::string token = serializeJWT(payload, jwt);
 	return {
@@ -710,7 +711,8 @@ json::Value RpcInterface::createRefreshToken(json::Value userId, bool temp) {
 	payload.set("id", userId)
 			   ("iat", std::chrono::duration_cast<std::chrono::seconds>(tp.time_since_epoch()).count())
 			   ("exp", std::chrono::duration_cast<std::chrono::seconds>(e.time_since_epoch()).count())
-			   ("sub", "rfr");
+			   ("sub", "rfr")
+			   ("iss", "adveri");
 	return serializeJWT(payload, jwt);
 }
 
