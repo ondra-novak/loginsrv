@@ -80,6 +80,8 @@ int App::run(ServiceControl &cntr, ArgList) {
 
     logProgress("Initializing server");
     RpcHttpServer server(bind_addr, asyncProvider);
+	server.setHostMapping(section_server["mapHosts"].getString(""));
+
     server.addRPCPath("/RPC");
     server.add_ping();
     server.add_listMethods();
