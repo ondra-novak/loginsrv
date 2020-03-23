@@ -391,7 +391,7 @@ void RpcInterface::rpcUser2login(json::RpcRequest req) {
 	auto opts = args[2];
 	auto exp = opts["expiration"].getValueOrDefault(15);
 	auto app = opts["appId"].getValueOrDefault("hf");
-	auto admin = opts["reqLevel"].getString() == "admin";
+	auto admin = opts["reqLevel"].getValueOrDefault(StrViewA("admin")) == "admin";
 	if (strp.empty() || strp[0] != '@') return req.setError(501, "Not implemented");
 	strp = strp.substr(1);
 	Provider provider = strProvider[strp];
@@ -889,6 +889,12 @@ void RpcInterface::rpcAdminCreateApp(json::RpcRequest req) {
 		}
 		req.setResult(Object
 				("_id", id)
+				("id",name)
+				("no_cppd_id",name)
+				("endpoints", Object("_default", json::object))
+				("emails",Object("request_code","Subject: Your login code id ${code}\r\n\r\nYour login code is ${code}.\r\n")
+						        ("first_login","Subject: Welcome user\r\n\r\nWelcome user on the server.\r\n")
+				)
 		);
 	}
 }
