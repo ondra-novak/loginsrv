@@ -211,13 +211,53 @@ void RpcInterface::rpcVerifyCode(json::RpcRequest req) {
 
 }
 
-std::string RpcInterface::generateCodeEmail(StrViewA email, StrViewA app, int code) {
+
+static std::string replace_placeholders(std::string templ, std::string seq, std::string value) {
 	std::ostringstream buff;
-	buff << "Subject: Login code " << code << std::endl
-		 << std::endl
-		 << "Login code for " << email << " and app: " << app << " si " << code << std::endl;
+	auto p = templ.find(seq);
+	decltype(p) q = 0;
+	while (p != templ.npos) {
+		buff << templ.substr(q,p-q);
+		buff << value;
+		q = p + seq.length();
+		p = templ.find(seq,q);
+	}
+	buff << templ.substr(q);
 	return buff.str();
 }
+
+std::string RpcInterface::generateCodeEmail(StrViewA email, StrViewA app, int code) {
+
+	String appid ({"app.",app});
+	Value appdoc = db->get(appid, db->flgNullIfMissing);
+	Value emails = appdoc["emails"];
+	Value reqcode = emails["request_code"];
+	if (reqcode.hasValue()) {
+
+		return replace_placeholders(reqcode.getString(),"${code}",std::to_string(code));
+
+	} else{
+		std::ostringstream buff;
+		buff << "Subject: Login code " << code << std::endl
+			 << std::endl
+			 << "Login code for " << email << " and app: " << app << " si " << code << std::endl;
+
+		return buff.str();
+	}
+
+}
+
+void RpcInterface::sendWelcomeEmail(StrViewA email, StrViewA app) {
+
+	String appid ({"app.",app});
+	Value appdoc = db->get(appid, db->flgNullIfMissing);
+	Value emails = appdoc["emails"];
+	Value first_login = emails["first_login"];
+	if (first_login.hasValue()) {
+		sendmail.send(email, first_login.getString());
+	}
+}
+
 
 static Value token_rejected ("token_rejected");
 
@@ -273,7 +313,7 @@ void RpcInterface::rpcLogin(json::RpcRequest req) {
 	if (userdoc == nullptr) {
 		req.setResult(Object
 				("new_user",true)
-				("signup_token", createSignupToken(email)));
+				("signup_token", createSignupToken(email,app)));
 	} else if (userdoc.isCopyOf(token_rejected)) {
 		req.setError(403, "Invalid credentials");
 	} else {
@@ -449,6 +489,7 @@ void RpcInterface::rpcUser2create(json::RpcRequest req) {
 		doc.set("email", email);
 		doc.set("cppd", true);
 		db->put(doc);
+		sendWelcomeEmail(email.getString(), app);
 		req.setResult(true);
 	} else if (userdoc.isCopyOf(token_rejected)) {
 		req.setError(403, "Invalid credentials");
@@ -524,21 +565,32 @@ void RpcInterface::rpcLoginAs(json::RpcRequest req) {
 					Object("app",{"string", "undefined"})
 						  ("exp",{"integer","undefined"})
 						  ("admin",{"boolean","undefined"})
+						  ("not_local_user",{"boolean","undefined"})
 						  ("roles",{{json::array,"string"},"undefined"})};
 	if (!req.checkArgs(arglist)) return req.setArgError();
 	auto ses = getSession(req);
 	if (ses.valid) {
 		if (ses.admin) {
-			Value doc = searchUser(req.getArgs()[0]);
-			if (doc.hasValue()) {
-				Value opts = req.getArgs()[1];
-				auto app = opts["app"].getValueOrDefault("hf");
-				auto exp = opts["exp"].getValueOrDefault(15);
-				auto roles = opts["roles"];
-				auto admin = opts["admin"].getBool();
-				req.setResult(loginByDoc(doc, app, exp, admin, roles));
+			Value opts = req.getArgs()[1];
+			bool not_local_user = opts["not_local_user"].getBool();
+			Value uid = req.getArgs()[0];
+			auto app = opts["app"].getValueOrDefault("hf");
+			auto exp = opts["exp"].getValueOrDefault(15);
+			auto roles = opts["roles"];
+			auto admin = opts["admin"].getBool();
+			if (not_local_user) {
+				auto s = createSession(uid, exp, app,admin,roles);
+				req.setResult(Object
+							("session", s.first)
+							("expiration", s.second));
+
 			} else {
-				req.setError(404,"Not found");
+				Value doc = searchUser(uid);
+				if (doc.hasValue()) {
+					req.setResult(loginByDoc(doc, app, exp, admin, roles));
+				} else {
+					req.setError(404,"Not found");
+				}
 			}
 		} else {
 			req.setError(403,"Need to be admin");
@@ -688,6 +740,7 @@ void RpcInterface::rpcSignup(json::RpcRequest req) {
 	Value token = checkJWTTime(parseJWT(req.getArgs()[0].getString(), jwt));
 	if (!token.hasValue()) return req.setError(401,"Token is not valid");
 	Value email = token["email"];
+	Value app = token["app"];
 
 	Value trydoc = findUserByEMail(email.getString());
 	if (!trydoc.hasValue()) {
@@ -696,6 +749,8 @@ void RpcInterface::rpcSignup(json::RpcRequest req) {
 		doc.set("cppd", req.getArgs()[1].getBool());
 		trydoc = doc;
 		db->put(doc);
+		sendWelcomeEmail(email.getString(),  app.getString());
+
 	}
 	req.setResult(Object
 			("token", createRefreshToken(trydoc["_id"],true))
@@ -717,11 +772,12 @@ json::Value RpcInterface::createRefreshToken(json::Value userId, bool temp) {
 }
 
 
-json::Value RpcInterface::createSignupToken(json::Value email) {
+json::Value RpcInterface::createSignupToken(json::Value email, json::Value app) {
 	auto tp = std::chrono::system_clock::now();
 	auto e = tp + std::chrono::hours(1);
 	Object payload;
 	payload.set("email", email)
+			   ("app", app)
 			   ("iat", std::chrono::duration_cast<std::chrono::seconds>(tp.time_since_epoch()).count())
 			   ("exp", std::chrono::duration_cast<std::chrono::seconds>(e.time_since_epoch()).count())
 			   ("sub", "sgnup");

@@ -103,7 +103,7 @@ protected:
 
 	std::pair<json::Value,std::uint64_t> createSession(json::Value userId, json::Value exp, json::Value app, bool admin, json::Value roles);
 	json::Value createRefreshToken(json::Value userId, bool temp = false);
-	json::Value createSignupToken(json::Value email);
+	json::Value createSignupToken(json::Value email, json::Value app);
 	json::Value loginByDoc(couchit::Document &&doc, json::StrViewA app, int exp, bool admin, json::Value roles);
 
 	void setResultAndContext(json::RpcRequest req, json::Value loginData);
@@ -126,6 +126,7 @@ protected:
 	AppInfo getAppInfo(json::StrViewA appId, json::Value userdoc, bool force);
 	AppInfo getAppInfoFromDoc(json::StrViewA appId, json::Value app, json::Value userdoc);
 
+	void sendWelcomeEmail(StrViewA email, StrViewA app);
 
 };
 
