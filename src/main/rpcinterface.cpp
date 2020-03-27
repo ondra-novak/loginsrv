@@ -14,6 +14,8 @@
 #include <shared/stringview.h>
 #include "rpcinterface.h"
 #include "loginApple.h"
+#include "loginFacebook.h"
+#include "loginGoogle.h"
 #include <chrono>
 #include <memory>
 #include <sstream>
@@ -272,7 +274,8 @@ Value RpcInterface::verifyLoginAndFindUser(Provider provider, const StrViewA &to
 		userdoc = loginToken(token);
 		break;
 	case RpcInterface::facebook:
-		userdoc = loginFacebook(token, email);
+		email = getFacebookAccountId(token);
+		userdoc = findUserByEMail(email.getString());
 		break;
 	case RpcInterface::apple:
 		try {
@@ -283,7 +286,8 @@ Value RpcInterface::verifyLoginAndFindUser(Provider provider, const StrViewA &to
 		}
 		break;
 	case RpcInterface::google:
-		userdoc = loginGoogle(token, email);
+		email = getGoogleAccountId(token);
+		userdoc = findUserByEMail(email.getString());
 		break;
 	}
 	return userdoc;
@@ -669,13 +673,6 @@ json::Value RpcInterface::loginToken(json::StrViewA token) {
 	return token_rejected;
 }
 
-json::Value RpcInterface::loginFacebook(json::StrViewA token, json::Value &email) {
-	return token_rejected;
-}
-
-json::Value RpcInterface::loginGoogle(json::StrViewA token, json::Value &email) {
-	return token_rejected;
-}
 
 json::Value RpcInterface::findUserByEMail(StrViewA email) {
 	auto q = db->createQuery(userIndexView);

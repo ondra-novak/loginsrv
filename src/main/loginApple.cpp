@@ -9,17 +9,24 @@
 #include <imtjson/jwt.h>
 #include <imtjson/jwtcrypto.h>
 #include <imtjson/parser.h>
+#include <imtjson/string.h>
+#include <imtjson/value.h>
 #include <openssl/bn.h>
 #include <openssl/ossl_typ.h>
 #include <openssl/rsa.h>
 #include <simpleServer/http_client.h>
+#include <simpleServer/http_headers.h>
 #include "loginApple.h"
 #include <atomic>
 #include <map>
 #include <mutex>
 #include <string>
 
+using json::String;
+using json::Value;
 using simpleServer::HttpClient;
+using simpleServer::newHttpsProvider;
+using simpleServer::SendHeaders;
 
 
 
@@ -40,7 +47,7 @@ int RSA_set0_key(RSA *r, BIGNUM *n, BIGNUM *e, BIGNUM *d) {
 
 
 static KeySet loadAppleKeys() {
-	HttpClient httpc("Happyfeed", simpleServer::newHttpsProvider());
+	HttpClient httpc(StrViewA(), simpleServer::newHttpsProvider());
 	auto response = httpc.request("GET","https://appleid.apple.com/auth/keys", simpleServer::SendHeaders());
 	int code = response.getStatus();
 	KeySet ks;
@@ -110,5 +117,3 @@ json::String getAppleAccountId(const json::StrViewA token) {
 		throw std::runtime_error("JWT token signature is invalid");
 	}
 }
-
-

@@ -93,8 +93,6 @@ protected:
 
 	json::Value loginEmail(json::StrViewA token, json::StrViewA email, json::StrViewA app);
 	json::Value loginToken(json::StrViewA token);
-	json::Value loginFacebook(json::StrViewA token, json::Value &email);
-	json::Value loginGoogle(json::StrViewA token, json::Value &email);
 
 
 	json::Value findUserByEMail(json::StrViewA email);
