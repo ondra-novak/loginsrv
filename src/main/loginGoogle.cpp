@@ -5,6 +5,7 @@
  *      Author: ondra
  */
 
+#include <imtjson/parser.h>
 #include <imtjson/string.h>
 #include <imtjson/value.h>
 #include <simpleServer/http_client.h>
@@ -20,9 +21,10 @@ using simpleServer::SendHeaders;
 
 
 
-json::String getFacebookAccountId(const json::StrViewA token) {
+
+json::String getGoogleAccountId(const json::StrViewA token) {
 	HttpClient httpc(StrViewA(), newHttpsProvider());
-	String url({"https://graph.facebook.com/me?access_token=",token,"&fields=email"});
+	String url({"https://oauth2.googleapis.com/tokeninfo?access_token=",token});
 	auto response = httpc.request("GET",url,SendHeaders());
 	if (response.getStatus() == 200) {
 		Value resp = Value::parse(response.getBody());
@@ -36,3 +38,4 @@ json::String getFacebookAccountId(const json::StrViewA token) {
 		throw std::runtime_error("Failed to validate token: code "+std::to_string(response.getStatus()));
 	}
 }
+
