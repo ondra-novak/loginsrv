@@ -427,6 +427,10 @@ void RpcInterface::setResultAndContext(json::RpcRequest req, json::Value loginDa
 	req.setResult(loginData, context);
 }
 
+void setStatusError(json::RpcRequest req, int status, const String message) {
+	req.setError(Object("status", status)("statusMessage",message));
+}
+
 void RpcInterface::rpcUser2login(json::RpcRequest req) {
 	if (!req.checkArgs({"string","string",{"any","undefined"}})) return req.setArgError();
 	auto args = req.getArgs();
@@ -444,20 +448,20 @@ void RpcInterface::rpcUser2login(json::RpcRequest req) {
 	if (provider == RpcInterface::email) {
 		auto nps = token.indexOf(":");
 		if (nps == token.npos)
-			return req.setError(401, "Invalid e-mail token");
+			return setStatusError(req,401, "Invalid e-mail token");
 		email = token.substr(nps+1);
 		token = token.substr(0,nps);
 	}
 
 	auto userdoc = verifyLoginAndFindUser(provider, token, app, email);
 	if (userdoc == nullptr) {
-		req.setError(404, "Not found");
+		setStatusError(req,404,"User not registered");
 	} else if (userdoc.isCopyOf(token_rejected)) {
-		req.setError(403, "Invalid credentials");
+		setStatusError(req,403,"Invalid credentials");
 	} else {
 		auto appinfo = getAppInfo(app, userdoc, false);
 		if (!appinfo.valid) {
-			return req.setError(400,"Unknown application id");
+			return setStatusError(req,400,"Unknown application id");
 		} else {
 			userdoc = userdoc.replace(json::Path::root/"lastLogin"/app, std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
 			db->put(userdoc);
@@ -474,7 +478,7 @@ void RpcInterface::rpcUser2create(json::RpcRequest req) {
 	auto token = args[1].getString();
 	auto opts= args[2];
 	auto app = opts["appId"].getValueOrDefault("hf");
-	if (strp.empty() || strp[0] != '@') return req.setError(501, "Not implemented");
+	if (strp.empty() || strp[0] != '@') return setStatusError(req,501, "Not implemented");
 	strp = strp.substr(1);
 	Provider provider = strProvider[strp];
 	Value email;
@@ -482,7 +486,7 @@ void RpcInterface::rpcUser2create(json::RpcRequest req) {
 	if (provider == RpcInterface::email) {
 		auto nps = token.indexOf(":");
 		if (nps == token.npos)
-			return req.setError(401, "Invalid e-mail token");
+			return setStatusError(req,401, "Invalid e-mail token");
 		email = token.substr(nps+1);
 		token = token.substr(0,nps);
 	}
@@ -496,9 +500,9 @@ void RpcInterface::rpcUser2create(json::RpcRequest req) {
 		sendWelcomeEmail(email.getString(), app);
 		req.setResult(true);
 	} else if (userdoc.isCopyOf(token_rejected)) {
-		req.setError(403, "Invalid credentials");
+		setStatusError(req,403, "Invalid credentials");
 	} else {
-		req.setError(409, "Already exists");
+		setStatusError(req,409, "Already exists");
 	}
 
 }
@@ -827,7 +831,7 @@ void RpcInterface::rpcUser2createRefreshToken(json::RpcRequest req) {
 		if (ses.roles.indexOf("hf2") != ses.roles.npos) {
 			req.setResult(createRefreshToken(ses.uid,false));
 		} else {
-			req.setError(403, "Permission denied");
+			setStatusError(req,403, "Permission denied");
 		}
 	}
 }
@@ -1156,7 +1160,7 @@ void RpcInterface::rpcGetLastLogin(json::RpcRequest req) {
 RpcInterface::AppInfo RpcInterface::getAppInfoFromDoc(json::StrViewA appId, json::Value app, json::Value userdoc) {
 	Value defapp = (*dcache)["default_app"];
 	if (defapp.type() == json::object) {
-		app = defapp.merge(Object(defapp).commitAsDiff());
+		app = defapp.merge(app);
 	}
 
 	bool cppd = userdoc["cppd"].getBool();

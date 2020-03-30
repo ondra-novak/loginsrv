@@ -24,7 +24,11 @@ using simpleServer::SendHeaders;
 
 json::String getGoogleAccountId(const json::StrViewA token) {
 	HttpClient httpc(StrViewA(), newHttpsProvider());
-	String url({"https://oauth2.googleapis.com/tokeninfo?access_token=",token});
+	String url;
+	if (token.startsWith("eyJ"))
+		url = String({"https://oauth2.googleapis.com/tokeninfo?id_token=",token});
+	else
+		url = String({"https://oauth2.googleapis.com/tokeninfo?access_token=",token});
 	auto response = httpc.request("GET",url,SendHeaders());
 	if (response.getStatus() == 200) {
 		Value resp = Value::parse(response.getBody());
