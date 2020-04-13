@@ -102,6 +102,7 @@ RpcInterface::RpcInterface(const Config &cfg)
 		,jwt(cfg.jwt)
 		,db(cfg.db)
 		,dcache(new couchit::DocCache(*cfg.db,{}))
+		,emailCodes(cfg.db)
 {
 	db->putDesignDocument(userIndexDDoc);
 	db->putDesignDocument(appIndexDDoc);
@@ -152,25 +153,6 @@ void RpcInterface::initRPC(json::RpcServer &srv) {
 
 }
 
-static std::pair<int,int> generateCode(StrViewA email, StrViewA app, int offset) {
-	auto now = std::chrono::system_clock::now();
-	auto minute = std::chrono::duration_cast<std::chrono::minutes>(now.time_since_epoch()).count();
-	minute = minute - offset;
-	std::ostringstream buff;
-	buff << email << ":" << app << ":" << minute;
-	std::string msg = buff.str();
-	unsigned char reshash[256];
-	unsigned int reshash_len = sizeof(reshash);
-	HMAC(EVP_sha1(), email.data, email.length,
-			reinterpret_cast<const unsigned char *>(msg.data()),
-			msg.length(),reshash,&reshash_len);
-
-	return {
-		((reshash[2]*65536+reshash[1]*256+reshash[0]) % 90000)+10000,
-		minute
-	};
-}
-
 
 
 void RpcInterface::rpcRequestCode(json::RpcRequest req) {
@@ -179,7 +161,7 @@ void RpcInterface::rpcRequestCode(json::RpcRequest req) {
 	auto args = req.getArgs();
 	StrViewA email = req[0].getString();
 	StrViewA app = req[1].getString();
-	int code = generateCode(email,app,0).first;
+	int code = emailCodes.generateCode(email);
 	std::string body = generateCodeEmail(email, app, code);
 	try {
 		sendmail.send(email, body);
@@ -198,18 +180,14 @@ void RpcInterface::rpcVerifyCode(json::RpcRequest req) {
 
 	auto args = req.getArgs();
 	StrViewA email = args[0]["email"].getString();
-	StrViewA app = args[0]["app"].getString();
+//	StrViewA app = args[0]["app"].getString();
 	auto code = args[0]["code"].getInt();
-
-	for (int i = 0; i < 15; i++) {
-		int c = generateCode(email,app, i).first;
-		if (c == code) {
-			req.setResult(true);
-			return;
-		}
+	if (emailCodes.checkCode(email, code)) {
+		req.setResult(true);
+		return;
+	} else {
+		req.setError(405,"Invalid code");
 	}
-
-	req.setError(405,"Invalid code");
 
 }
 
@@ -264,11 +242,11 @@ void RpcInterface::sendWelcomeEmail(StrViewA email, StrViewA app) {
 static Value token_rejected ("token_rejected");
 
 
-Value RpcInterface::verifyLoginAndFindUser(Provider provider, const StrViewA &token,	const StrViewA &app, Value &email) {
+Value RpcInterface::verifyLoginAndFindUser(Provider provider, const StrViewA &token, Value &email) {
 	Value userdoc;
 	switch (provider) {
 	case RpcInterface::email:
-		userdoc = loginEmail(token, email.getString(), app);
+		userdoc = loginEmail(token, email.getString());
 		break;
 	case RpcInterface::token:
 		userdoc = loginToken(token);
@@ -313,7 +291,7 @@ void RpcInterface::rpcLogin(json::RpcRequest req) {
 	auto exp = args["exp"].getValueOrDefault(15);
 	auto admin = args["admin"].getBool();
 	Provider provider = strProvider[args["provider"].getString()];
-	Value userdoc = verifyLoginAndFindUser(provider, token, app, email);
+	Value userdoc = verifyLoginAndFindUser(provider, token, email);
 	if (userdoc == nullptr) {
 		req.setResult(Object
 				("new_user",true)
@@ -453,7 +431,7 @@ void RpcInterface::rpcUser2login(json::RpcRequest req) {
 		token = token.substr(0,nps);
 	}
 
-	auto userdoc = verifyLoginAndFindUser(provider, token, app, email);
+	auto userdoc = verifyLoginAndFindUser(provider, token, email);
 	if (userdoc == nullptr) {
 		setStatusError(req,404,"User not registered");
 	} else if (userdoc.isCopyOf(token_rejected)) {
@@ -491,7 +469,7 @@ void RpcInterface::rpcUser2create(json::RpcRequest req) {
 		token = token.substr(0,nps);
 	}
 
-	auto userdoc = verifyLoginAndFindUser(provider, token, app, email);
+	auto userdoc = verifyLoginAndFindUser(provider, token, email);
 	if (userdoc == nullptr) {
 		Document doc = db->newDocument("u");
 		doc.set("email", email);
@@ -642,21 +620,14 @@ json::Value RpcInterface::loginByDoc(couchit::Document &&doc, StrViewA app, int 
 }
 
 
-json::Value RpcInterface::loginEmail(json::StrViewA token, json::StrViewA email, json::StrViewA app) {
+json::Value RpcInterface::loginEmail(json::StrViewA token, json::StrViewA email) {
 	int v = std::atoi(token.data);
-	for (int i = 0; i < 15; i++) {
-		auto cv = generateCode(email,app, i);
-		if (cv.first == v) {
-			Value doc = findUserByEMail(email);
-			if (doc == nullptr) return doc;
-			Value lastTOTP = doc["lastTOTP"];
-			if (!lastTOTP.defined() || cv.second > lastTOTP.getInt()) {
-				doc = doc.replace("lastTOTP",cv.second);
-				return doc;
-			}
-		}
+	if (emailCodes.checkCode(email,v)) {
+		Value doc = findUserByEMail(email);
+		return doc;
+	} else {
+		return token_rejected;
 	}
-	return token_rejected;
 }
 
 json::Value RpcInterface::loginToken(json::StrViewA token) {

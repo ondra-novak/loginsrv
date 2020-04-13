@@ -12,6 +12,7 @@
 #include <couchit/memview.h>
 #include <imtjson/jwt.h>
 #include <imtjson/rpc.h>
+#include <main/emailcodes.h>
 #include "sendmail.h"
 
 class RpcInterface {
@@ -88,10 +89,11 @@ protected:
 	json::PJWTCrypto jwt;
 	std::shared_ptr<couchit::CouchDB> db;
 	std::shared_ptr<couchit::DocCache> dcache;
+	EmailCodes emailCodes;
 
 	std::string generateCodeEmail(ondra_shared::StrViewA email, ondra_shared::StrViewA app, int code);
 
-	json::Value loginEmail(json::StrViewA token, json::StrViewA email, json::StrViewA app);
+	json::Value loginEmail(json::StrViewA token, json::StrViewA email);
 	json::Value loginToken(json::StrViewA token);
 
 
@@ -107,7 +109,7 @@ protected:
 	void setResultAndContext(json::RpcRequest req, json::Value loginData);
 	json::Value searchUser(const json::Value &srch);
 
-	json::Value verifyLoginAndFindUser(Provider provider, const json::StrViewA &token,	const json::StrViewA &app, json::Value &email);
+	json::Value verifyLoginAndFindUser(Provider provider, const json::StrViewA &token,	json::Value &email);
 	void deactivateUser(couchit::Document &&doc);
 
 	json::Value getApp(json::StrViewA appId);
