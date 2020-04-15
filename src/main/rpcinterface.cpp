@@ -10,6 +10,7 @@
 #include <couchit/document.h>
 #include <couchit/result.h>
 #include <imtjson/namedEnum.h>
+#include <main/invationsvc.h>
 #include <openssl/hmac.h>
 #include <shared/stringview.h>
 #include "rpcinterface.h"
@@ -27,7 +28,7 @@ using couchit::Row;
 using ondra_shared::StrViewA;
 using namespace json;
 
-static json::NamedEnum<RpcInterface::Provider> strProvider({
+json::NamedEnum<RpcInterface::Provider> RpcInterface::strProvider({
 	{RpcInterface::email, "email"},
 	{RpcInterface::apple, "apple"},
 	{RpcInterface::facebook, "facebook"},
@@ -38,7 +39,7 @@ static json::NamedEnum<RpcInterface::Provider> strProvider({
 	{RpcInterface::google, "google.com"},
 });
 
-static Value providers_valid_list(json::array,strProvider.begin(), strProvider.end(),[](const auto &x){return Value(String({"'",x.name}));});
+Value RpcInterface::providers_valid_list(json::array,strProvider.begin(), strProvider.end(),[](const auto &x){return Value(String({"'",x.name}));});
 
 static StrViewA userIndex = R"js(
 function(doc) {
@@ -47,12 +48,21 @@ function(doc) {
 }
 )js";
 
+static StrViewA invationIndex = R"js(
+function(doc) {
+	if (doc.invation) emit(doc.invation);
+}
+)js";
+
 static Value userIndexDDoc = Object
 		("_id","_design/userIndex")
 		("language","javascript")
 		("views", Object
 				("userIndex", Object
-						("map", userIndex)));
+						("map", userIndex))
+				("invationIndex",Object
+						("map", invationIndex))
+		);
 
 static StrViewA appIndex = R"js(
 function(doc){
@@ -95,6 +105,7 @@ static Value lastLoginDDoc = Object
 
 static couchit::View userIndexView("_design/userIndex/_view/userIndex", couchit::View::update);
 static couchit::View appIndexView("_design/appIndex/_view/appIndex", couchit::View::update);
+static couchit::View invationView("_design/userIndex/_view/invationIndex", couchit::View::update);
 static couchit::View lastLoginView("_design/lastLoginIndex/_view/lastLoginIndex", couchit::View::update);
 
 RpcInterface::RpcInterface(const Config &cfg)
@@ -103,6 +114,7 @@ RpcInterface::RpcInterface(const Config &cfg)
 		,db(cfg.db)
 		,dcache(new couchit::DocCache(*cfg.db,{}))
 		,emailCodes(cfg.db)
+		,invations(cfg.invationSvc)
 {
 	db->putDesignDocument(userIndexDDoc);
 	db->putDesignDocument(appIndexDDoc);
@@ -142,13 +154,9 @@ void RpcInterface::initRPC(json::RpcServer &srv) {
 	srv.add("Admin.setUserEndpoints",this,&RpcInterface::rpcSetUserEndpoints);
 	srv.add("Admin.getUserEndpoints",this,&RpcInterface::rpcGetUserEndpoints);
 	srv.add("Admin.lastLogin",this,&RpcInterface::rpcGetLastLogin);
-	srv.add("User2.sendCodeToEmail",this,&RpcInterface::rpcRequestCode);
-	srv.add("User2.login",this,&RpcInterface::rpcUser2login);
-	srv.add("User2.create",this,&RpcInterface::rpcUser2create);
-	srv.add("User2.getEndPoints",this,&RpcInterface::rpcUser2getEndPoints);
-	srv.add("User2.createRefreshToken",this,&RpcInterface::rpcUser2createRefreshToken);
-	srv.add("User2.revokeAllSessions",this,&RpcInterface::rpcLogoutAll);
-	srv.add("User2.whoami",this,&RpcInterface::rpcUser2whoami);
+	if (invations) {
+		srv.add("Admin.createInvations",this,&RpcInterface::rpcCreateInvations);
+	}
 
 
 }
@@ -227,6 +235,24 @@ std::string RpcInterface::generateCodeEmail(StrViewA email, StrViewA app, int co
 
 }
 
+void RpcInterface::rpcCreateInvations(json::RpcRequest req) {
+	if (!req.checkArgs(Value(json::array,{"number"}))) return req.setArgError();
+	auto ses = getSession(req);
+	if (ses.valid) {
+		if (ses.admin) {
+			auto count = req.getArgs()[0].getUInt();
+			Array res;
+			while (count > 0) {
+				count--;
+				res.push_back(invations->createInvation());
+			}
+			req.setResult(res);
+		} else {
+			req.setError(403,"Need to be admin");
+		}
+	}
+}
+
 void RpcInterface::sendWelcomeEmail(StrViewA email, StrViewA app) {
 
 	String appid ({"app.",app});
@@ -239,7 +265,7 @@ void RpcInterface::sendWelcomeEmail(StrViewA email, StrViewA app) {
 }
 
 
-static Value token_rejected ("token_rejected");
+Value RpcInterface::token_rejected ("token_rejected");
 
 
 Value RpcInterface::verifyLoginAndFindUser(Provider provider, const StrViewA &token, Value &email) {
@@ -299,7 +325,7 @@ void RpcInterface::rpcLogin(json::RpcRequest req) {
 	} else if (userdoc.isCopyOf(token_rejected)) {
 		req.setError(403, "Invalid credentials");
 	} else {
-		setResultAndContext(req, loginByDoc(userdoc, app, exp, admin,roles));
+		setResultAndContext(req, loginByDoc(userdoc, app, exp, admin,roles,true));
 	}
 }
 
@@ -405,85 +431,7 @@ void RpcInterface::setResultAndContext(json::RpcRequest req, json::Value loginDa
 	req.setResult(loginData, context);
 }
 
-void setStatusError(json::RpcRequest req, int status, const String message) {
-	req.setError(Object("status", status)("statusMessage",message));
-}
 
-void RpcInterface::rpcUser2login(json::RpcRequest req) {
-	if (!req.checkArgs({"string","string",{"any","undefined"}})) return req.setArgError();
-	auto args = req.getArgs();
-	auto strp = args[0].getString();
-	auto token = args[1].getString();
-	auto opts = args[2];
-	auto exp = opts["expiration"].getValueOrDefault(15);
-	auto app = opts["appId"].getValueOrDefault("hf");
-	auto admin = opts["reqLevel"].getValueOrDefault(StrViewA("admin")) == "admin";
-	if (strp.empty() || strp[0] != '@') return req.setError(501, "Not implemented");
-	strp = strp.substr(1);
-	Provider provider = strProvider[strp];
-	Value email;
-
-	if (provider == RpcInterface::email) {
-		auto nps = token.indexOf(":");
-		if (nps == token.npos)
-			return setStatusError(req,401, "Invalid e-mail token");
-		email = token.substr(nps+1);
-		token = token.substr(0,nps);
-	}
-
-	auto userdoc = verifyLoginAndFindUser(provider, token, email);
-	if (userdoc == nullptr) {
-		setStatusError(req,404,"User not registered");
-	} else if (userdoc.isCopyOf(token_rejected)) {
-		setStatusError(req,403,"Invalid credentials");
-	} else {
-		auto appinfo = getAppInfo(app, userdoc, false);
-		if (!appinfo.valid) {
-			return setStatusError(req,400,"Unknown application id");
-		} else {
-			userdoc = userdoc.replace(json::Path::root/"lastLogin"/app, std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
-			db->put(userdoc);
-			auto session = createSession(userdoc["_id"],exp,app,admin,Value(json::array,{"hf2"}));
-			req.setResult(session.first, Object("session",session.first));
-		}
-	}
-}
-
-void RpcInterface::rpcUser2create(json::RpcRequest req) {
-	if (!req.checkArgs({"string","string",{"any","undefined"}})) return req.setArgError();
-	auto args = req.getArgs();
-	auto strp = args[0].getString();
-	auto token = args[1].getString();
-	auto opts= args[2];
-	auto app = opts["appId"].getValueOrDefault("hf");
-	if (strp.empty() || strp[0] != '@') return setStatusError(req,501, "Not implemented");
-	strp = strp.substr(1);
-	Provider provider = strProvider[strp];
-	Value email;
-
-	if (provider == RpcInterface::email) {
-		auto nps = token.indexOf(":");
-		if (nps == token.npos)
-			return setStatusError(req,401, "Invalid e-mail token");
-		email = token.substr(nps+1);
-		token = token.substr(0,nps);
-	}
-
-	auto userdoc = verifyLoginAndFindUser(provider, token, email);
-	if (userdoc == nullptr) {
-		Document doc = db->newDocument("u");
-		doc.set("email", email);
-		doc.set("cppd", true);
-		db->put(doc);
-		sendWelcomeEmail(email.getString(), app);
-		req.setResult(true);
-	} else if (userdoc.isCopyOf(token_rejected)) {
-		setStatusError(req,403, "Invalid credentials");
-	} else {
-		setStatusError(req,409, "Already exists");
-	}
-
-}
 
 Value RpcInterface::searchUser(const Value &srch) {
 	Value doc;
@@ -573,7 +521,7 @@ void RpcInterface::rpcLoginAs(json::RpcRequest req) {
 			} else {
 				Value doc = searchUser(uid);
 				if (doc.hasValue()) {
-					req.setResult(loginByDoc(doc, app, exp, admin, roles));
+					req.setResult(loginByDoc(doc, app, exp, admin, roles,false));
 				} else {
 					req.setError(404,"Not found");
 				}
@@ -593,15 +541,20 @@ json::Value filterRoles(const Document &doc, Value roles) {
 	});
 }
 
-json::Value RpcInterface::loginByDoc(couchit::Document &&doc, StrViewA app, int exp, bool admin, Value roles) {
-	{
-		auto lastLogin = doc.object("lastLogin");
-		lastLogin.set(app,std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
-	}
+json::Value RpcInterface::loginByDoc(couchit::Document &&doc, StrViewA app, int exp, bool admin, Value roles, bool storeLastLogin) {
 	roles = filterRoles(doc, roles);
 	auto appinfo = getAppInfo(app, doc.getBaseObject(), admin);
 	if (!appinfo.valid) throw std::runtime_error("Unknown application id");
-	db->put(doc);
+	if (storeLastLogin)	{
+		try {
+			auto lastLogin = doc.object("lastLogin");
+			lastLogin.set(app,std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+			db->put(doc);
+		} catch (couchit::UpdateException &e) {
+			if (!e.getError(0).isConflict()) throw;
+			//ignore conflict as it is only record of lastLogin. If there is multiple logins at once, no need to record it separatedly
+		}
+	}
 	auto sesinfo = createSession(doc.getID(), exp, appinfo.appId.getString(), doc["admin"].getBool() && admin, roles);
 	Value rfrtoken = createRefreshToken(doc.getID());
 	return Object
@@ -707,18 +660,25 @@ void RpcInterface::rpcParseToken(json::RpcRequest req) {
 }
 
 void RpcInterface::rpcSignup(json::RpcRequest req) {
-	static Value arglist = {"string",{"boolean","undefined"}};
+	static Value arglist = {"string",{"boolean","undefined"},{"string","undefined"}};
 	if (!req.checkArgs(arglist)) return req.setArgError();
 	Value token = checkJWTTime(parseJWT(req.getArgs()[0].getString(), jwt));
 	if (!token.hasValue()) return req.setError(401,"Token is not valid");
 	Value email = token["email"];
 	Value app = token["app"];
+	Value invation = req.getArgs()[2];
+	if (invations) {
+		if (!invation.hasValue()) return req.setError(417, "Invation required");
+		if (!invations->checkInvation(invation.getString())) return req.setError(418,"Invalid invation code");
+		if (!Result(db->createQuery(invationView).key(invation).exec()).empty()) return req.setError(419,"Invation already used");
+	}
 
 	Value trydoc = findUserByEMail(email.getString());
 	if (!trydoc.hasValue()) {
 		Document doc = db->newDocument("u");
 		doc.set("email", email);
 		doc.set("cppd", req.getArgs()[1].getBool());
+		doc.set("invation", invations?invation:Value());
 		trydoc = doc;
 		db->put(doc);
 		sendWelcomeEmail(email.getString(),  app.getString());
@@ -784,28 +744,6 @@ void RpcInterface::rpcSetRoles(json::RpcRequest req) {
 
 }
 
-void RpcInterface::rpcUser2getEndPoints(json::RpcRequest req) {
-	auto ses = getSession(req);
-	if (ses.valid) {
-		Value userdoc = findUserByID(ses.uid);
-		Value app = findApp(ses.app);
-		auto appinfo = getAppInfoFromDoc(ses.app,app,userdoc);
-		req.setResult(appinfo.endpoints);
-	}
-
-}
-
-void RpcInterface::rpcUser2createRefreshToken(json::RpcRequest req) {
-	if (!req.checkArgs(json::array)) return req.setArgError();
-	auto ses = getSession(req);
-	if (ses.valid) {
-		if (ses.roles.indexOf("hf2") != ses.roles.npos) {
-			req.setResult(createRefreshToken(ses.uid,false));
-		} else {
-			setStatusError(req,403, "Permission denied");
-		}
-	}
-}
 
 void RpcInterface::rpcLogoutAll(json::RpcRequest req) {
 	if (!req.checkArgs(json::array)) return req.setArgError();
@@ -819,35 +757,6 @@ void RpcInterface::rpcLogoutAll(json::RpcRequest req) {
 	}
 }
 
-void RpcInterface::rpcUser2whoami(json::RpcRequest req) {
-	if (!req.checkArgs(json::array)) return req.setArgError();
-	Value ctx = req.getContext();
-	Value ses = ctx["session"];
-	if (ses.hasValue()) {
-		Value sesInfo = checkJWTTime(parseJWT(ses.getString(), jwt));
-		if (sesInfo.hasValue()) {
-			Value level = sesInfo["adm"].getBool()?"admin":"user";
-			Value doc = findUserByID(sesInfo["id"].getString());
-			Value doclevel = doc["admin"].getBool()?"admin":"user";
-			auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-			req.setResult(Object
-					("appId", sesInfo["app"])
-					("availableUserLevel", doclevel)
-					("effectiveUserLevel", level)
-					("email", doc["email"])
-					("expires", (sesInfo["exp"].getUInt() - now)/60.0)
-					("flags", "validemail")
-					("newsletter", "disabled")
-					("testerMode", false)
-					("userId", doc["num_id"])
-					("userLevel", doclevel)
-					("userName", doc["email"])
-			);
-			return;
-		}
-	}
-	req.setError(401, "Invalid session");
-}
 
 void RpcInterface::rpcUserWhoami(json::RpcRequest req) {
 	if (!req.checkArgs(json::array)) return req.setArgError();

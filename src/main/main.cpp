@@ -3,7 +3,9 @@
 #include <imtjson/jwtcrypto.h>
 #include <rpc/rpcServer.h>
 #include <imtjson/rpc.h>
+#include <main/invationsvc.h>
 #include <main/rpcinterface.h>
+#include <main/rpcInterfaceOld.h>
 #include <main/sendmail.h>
 #include <openssl/sha.h>
 #include <shared/default_app.h>
@@ -76,7 +78,20 @@ int App::run(ServiceControl &cntr, ArgList) {
                     std::max<unsigned int>(1,section_server.mandatory["threads"].getUInt()),
                     std::max<unsigned int>(1,section_server["dispatchers"].getUInt(1)));
 
-    RpcInterface rpcInterface(RpcInterface::Config{sendmail,jwt,db,*chdist});
+
+    std::shared_ptr<InvationSvc> invsvc;
+    if (config["invationAPI"]["enable"].getBool(false)) {
+    	auto key = config["invationAPI"].mandatory["key"].getString();
+    	invsvc = std::make_shared<InvationSvc>(std::string(key));
+    }
+
+    std::shared_ptr<RpcInterface> rpcifc;
+    {
+    	RpcInterface::Config rpccfg{sendmail,jwt,db,*chdist,invsvc.get()};
+    	rpcifc = config["oldAPI"]["enable"].getBool(false)?
+						std::make_shared<RpcInterfaceOld>(std::move(rpccfg)):
+						std::make_shared<RpcInterface>(std::move(rpccfg));
+    }
 
     logProgress("Initializing server");
     RpcHttpServer server(bind_addr, asyncProvider);
@@ -91,10 +106,10 @@ int App::run(ServiceControl &cntr, ArgList) {
     	}
     	return true;
     });
-    rpcInterface.initRPC(server);
+    rpcifc->initRPC(server);
 
     if (config["num_ids"]["enable"].getBool()) {
-    	rpcInterface.initNumIDSvc(*chdist);
+    	rpcifc->initNumIDSvc(*chdist);
     }
 
     chdist->runService([]{

@@ -11,9 +11,12 @@
 #include <couchit/doccache.h>
 #include <couchit/memview.h>
 #include <imtjson/jwt.h>
+#include <imtjson/namedEnum.h>
 #include <imtjson/rpc.h>
 #include <main/emailcodes.h>
 #include "sendmail.h"
+
+class InvationSvc;
 
 class RpcInterface {
 public:
@@ -23,6 +26,7 @@ public:
 		json::PJWTCrypto jwt;
 		std::shared_ptr<couchit::CouchDB> db;
 		couchit::ChangesDistributor &chdist;
+		InvationSvc *invationSvc;
 	};
 
 	enum Provider {
@@ -38,7 +42,7 @@ public:
 	RpcInterface(const Config &cfg);
 	virtual ~RpcInterface();
 
-	void initRPC(json::RpcServer &srv);
+	virtual void initRPC(json::RpcServer &srv);
 
 
 	void rpcRequestCode(json::RpcRequest req);
@@ -53,13 +57,8 @@ public:
 	void rpcFindUser(json::RpcRequest req);
 	void rpcLoginAs(json::RpcRequest req);
 
-	void rpcUser2login(json::RpcRequest req);
-	void rpcUser2create(json::RpcRequest req);
-	void rpcUser2getEndPoints(json::RpcRequest req);
-	void rpcUser2createRefreshToken(json::RpcRequest req);
 	void rpcLogoutAll(json::RpcRequest req);
 	void rpcUserWhoami(json::RpcRequest req);
-	void rpcUser2whoami(json::RpcRequest req);
 	void rpcSetRoles(json::RpcRequest req);
 	void rpcUserDelete(json::RpcRequest req);
 	void rpcAdminDeleteUser(json::RpcRequest req);
@@ -73,6 +72,7 @@ public:
 	void rpcGetUserEndpoints(json::RpcRequest req);
 	void rpcGetLastLogin(json::RpcRequest req);
 
+	void rpcCreateInvations(json::RpcRequest req);
 
 	struct SessionInfo {
 		bool valid = false;
@@ -90,6 +90,7 @@ protected:
 	std::shared_ptr<couchit::CouchDB> db;
 	std::shared_ptr<couchit::DocCache> dcache;
 	EmailCodes emailCodes;
+	InvationSvc *invations;
 
 	std::string generateCodeEmail(ondra_shared::StrViewA email, ondra_shared::StrViewA app, int code);
 
@@ -104,7 +105,7 @@ protected:
 	std::pair<json::Value,std::uint64_t> createSession(json::Value userId, json::Value exp, json::Value app, bool admin, json::Value roles);
 	json::Value createRefreshToken(json::Value userId, bool temp = false);
 	json::Value createSignupToken(json::Value email, json::Value app);
-	json::Value loginByDoc(couchit::Document &&doc, json::StrViewA app, int exp, bool admin, json::Value roles);
+	json::Value loginByDoc(couchit::Document &&doc, json::StrViewA app, int exp, bool admin, json::Value roles, bool storeLastLogin);
 
 	void setResultAndContext(json::RpcRequest req, json::Value loginData);
 	json::Value searchUser(const json::Value &srch);
@@ -128,6 +129,9 @@ protected:
 
 	void sendWelcomeEmail(StrViewA email, StrViewA app);
 
+	static json::NamedEnum<RpcInterface::Provider> strProvider;
+	static json::Value providers_valid_list;
+	static json::Value token_rejected;
 };
 
 #endif /* SRC_MAIN_RPCINTERFACE_H_ */
