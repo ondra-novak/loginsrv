@@ -37,7 +37,7 @@ unsigned int EmailCodes::generateCode(json::String email) {
 		codes = codes.filter([&](Value z){
 			if (z.getKey() == email && z["exp"].getIntLong() > now+800)
 				dupreq = z["code"].getUInt();
-			return z["exp"].getIntLong() > now && z["tries"].getUInt() < 6;
+			return z["exp"].getIntLong() > now && z["tries"].getUInt() < 10;
 		});
 	} else {
 		codes = json::object;
@@ -54,7 +54,7 @@ unsigned int EmailCodes::generateCode(json::String email) {
 	return randomCode;
 }
 
-bool EmailCodes::checkCode(json::String email, unsigned int code) {
+bool EmailCodes::checkCode(json::String email, unsigned int code, bool nosuccessinv) {
 	std::unique_lock _(lock);
 	auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 	Result items = db->createQuery(View::includeDocs).prefixString("email_codes").exec();
@@ -86,9 +86,9 @@ bool EmailCodes::checkCode(json::String email, unsigned int code) {
 
 	Value found = iter->second;
 	auto tries = found["tries"].getUInt();
-	if (found["code"].getUInt() == code && tries < 6) {
+	if (found["code"].getUInt() == code && tries < 10) {
 		suc = true;
-		found = found.replace("tries",999999);
+		found = found.replace("tries",nosuccessinv?tries+1:999999);
 	} else {
 		found = found.replace("tries", tries+1);
 	}

@@ -62,7 +62,7 @@ void RpcInterfaceOld::rpcUser2login(json::RpcRequest req) {
 		token = token.substr(0,nps);
 	}
 
-	auto userdoc = verifyLoginAndFindUser(provider, token, email);
+	auto userdoc = verifyLoginAndFindUser(provider, token, email, true);
 	if (userdoc == nullptr) {
 		setStatusError(req,404,"User not registered");
 	} else if (userdoc.isCopyOf(token_rejected)) {
@@ -100,7 +100,7 @@ void RpcInterfaceOld::rpcUser2create(json::RpcRequest req) {
 		token = token.substr(0,nps);
 	}
 
-	auto userdoc = verifyLoginAndFindUser(provider, token, email);
+	auto userdoc = verifyLoginAndFindUser(provider, token, email, true);
 	if (userdoc == nullptr) {
 		Document doc = db->newDocument("u");
 		doc.set("email", email);

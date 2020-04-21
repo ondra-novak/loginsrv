@@ -94,7 +94,7 @@ protected:
 
 	std::string generateCodeEmail(ondra_shared::StrViewA email, ondra_shared::StrViewA app, int code);
 
-	json::Value loginEmail(json::StrViewA token, json::StrViewA email);
+	json::Value loginEmail(json::StrViewA token, json::StrViewA email, bool oldapi);
 	json::Value loginToken(json::StrViewA token);
 
 
@@ -110,7 +110,7 @@ protected:
 	void setResultAndContext(json::RpcRequest req, json::Value loginData);
 	json::Value searchUser(const json::Value &srch);
 
-	json::Value verifyLoginAndFindUser(Provider provider, const json::StrViewA &token,	json::Value &email);
+	json::Value verifyLoginAndFindUser(Provider provider, const json::StrViewA &token,	json::Value &email, bool oldapi);
 	void deactivateUser(couchit::Document &&doc);
 
 	json::Value getApp(json::StrViewA appId);

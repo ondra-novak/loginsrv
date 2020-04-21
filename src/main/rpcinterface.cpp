@@ -190,7 +190,7 @@ void RpcInterface::rpcVerifyCode(json::RpcRequest req) {
 	StrViewA email = args[0]["email"].getString();
 //	StrViewA app = args[0]["app"].getString();
 	auto code = args[0]["code"].getInt();
-	if (emailCodes.checkCode(email, code)) {
+	if (emailCodes.checkCode(email, code, true)) {
 		req.setResult(true);
 		return;
 	} else {
@@ -268,11 +268,11 @@ void RpcInterface::sendWelcomeEmail(StrViewA email, StrViewA app) {
 Value RpcInterface::token_rejected ("token_rejected");
 
 
-Value RpcInterface::verifyLoginAndFindUser(Provider provider, const StrViewA &token, Value &email) {
+Value RpcInterface::verifyLoginAndFindUser(Provider provider, const StrViewA &token, Value &email, bool oldapi) {
 	Value userdoc;
 	switch (provider) {
 	case RpcInterface::email:
-		userdoc = loginEmail(token, email.getString());
+		userdoc = loginEmail(token, email.getString(), oldapi);
 		break;
 	case RpcInterface::token:
 		userdoc = loginToken(token);
@@ -317,7 +317,7 @@ void RpcInterface::rpcLogin(json::RpcRequest req) {
 	auto exp = args["exp"].getValueOrDefault(15);
 	auto admin = args["admin"].getBool();
 	Provider provider = strProvider[args["provider"].getString()];
-	Value userdoc = verifyLoginAndFindUser(provider, token, email);
+	Value userdoc = verifyLoginAndFindUser(provider, token, email, false);
 	if (userdoc == nullptr) {
 		req.setResult(Object
 				("new_user",true)
@@ -555,7 +555,8 @@ json::Value RpcInterface::loginByDoc(couchit::Document &&doc, StrViewA app, int 
 			//ignore conflict as it is only record of lastLogin. If there is multiple logins at once, no need to record it separatedly
 		}
 	}
-	auto sesinfo = createSession(doc.getID(), exp, appinfo.appId.getString(), doc["admin"].getBool() && admin, roles);
+	bool enable_admin = doc["admin"].getBool() && admin;
+	auto sesinfo = createSession(doc.getID(), exp, appinfo.appId.getString(), enable_admin, roles);
 	Value rfrtoken = createRefreshToken(doc.getID());
 	return Object
 			("new_user",false)
@@ -567,15 +568,16 @@ json::Value RpcInterface::loginByDoc(couchit::Document &&doc, StrViewA app, int 
 			("cppd", doc["cppd"])
 			("email", doc["email"])
 			("roles", roles)
+			("admin", enable_admin)
 			("endpoints", appinfo.endpoints);
 
 
 }
 
 
-json::Value RpcInterface::loginEmail(json::StrViewA token, json::StrViewA email) {
+json::Value RpcInterface::loginEmail(json::StrViewA token, json::StrViewA email, bool oldapi) {
 	int v = std::atoi(token.data);
-	if (emailCodes.checkCode(email,v)) {
+	if (emailCodes.checkCode(email,v,oldapi)) {
 		Value doc = findUserByEMail(email);
 		return doc;
 	} else {
