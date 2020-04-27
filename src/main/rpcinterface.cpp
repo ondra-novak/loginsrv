@@ -564,6 +564,7 @@ json::Value RpcInterface::loginByDoc(couchit::Document &&doc, StrViewA app, int 
 			("expiration", sesinfo.second)
 			("refresh", rfrtoken)
 			("num_id", doc["num_id"])
+			("id", doc.getIDValue())
 			("profile", doc["profile"])
 			("cppd", doc["cppd"])
 			("email", doc["email"])
