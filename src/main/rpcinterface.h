@@ -34,7 +34,8 @@ public:
 		facebook,
 		google,
 		token,
-		apple
+		apple,
+		trezor
 	};
 
 
@@ -71,6 +72,8 @@ public:
 	void rpcSetUserEndpoints(json::RpcRequest req);
 	void rpcGetUserEndpoints(json::RpcRequest req);
 	void rpcGetLastLogin(json::RpcRequest req);
+	void rpcAdminGenTokens(json::RpcRequest req);
+	void rpcAddProvider(json::RpcRequest req);
 
 	void rpcCreateInvations(json::RpcRequest req);
 
@@ -104,13 +107,13 @@ protected:
 
 	std::pair<json::Value,std::uint64_t> createSession(json::Value userId, json::Value exp, json::Value app, bool admin, json::Value roles);
 	json::Value createRefreshToken(json::Value userId, bool temp = false);
-	json::Value createSignupToken(json::Value email, json::Value app);
+	json::Value createSignupToken(json::Value provider, json::Value email, json::Value app);
 	json::Value loginByDoc(couchit::Document &&doc, json::StrViewA app, int exp, bool admin, json::Value roles, bool storeLastLogin);
 
 	void setResultAndContext(json::RpcRequest req, json::Value loginData);
 	json::Value searchUser(const json::Value &srch);
 
-	json::Value verifyLoginAndFindUser(Provider provider, const json::StrViewA &token,	json::Value &email, bool oldapi);
+	json::Value verifyLoginAndFindUser(Provider provider, const json::StrViewA &token,	json::Value &email, bool oldapi, json::StrViewA app);
 	void deactivateUser(couchit::Document &&doc);
 
 	json::Value getApp(json::StrViewA appId);

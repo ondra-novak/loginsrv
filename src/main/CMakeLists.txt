@@ -5,7 +5,8 @@ add_executable (loginserver main.cpp
 	rpcinterface.cpp 
 	loginApple.cpp 
 	loginFacebook.cpp 
-	loginGoogle.cpp 
+	loginGoogle.cpp
+	loginTrezor.cpp 
 	emailcodes.cpp
 	rpcInterfaceOld.cpp
 	invationsvc.cpp

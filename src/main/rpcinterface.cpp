@@ -11,6 +11,7 @@
 #include <couchit/result.h>
 #include <imtjson/namedEnum.h>
 #include <main/invationsvc.h>
+#include <main/loginTrezor.h>
 #include <openssl/hmac.h>
 #include <shared/stringview.h>
 #include "rpcinterface.h"
@@ -37,6 +38,7 @@ json::NamedEnum<RpcInterface::Provider> RpcInterface::strProvider({
 	{RpcInterface::apple, "apple.com"},
 	{RpcInterface::facebook, "facebook.com"},
 	{RpcInterface::google, "google.com"},
+	{RpcInterface::trezor, "trezor"},
 });
 
 Value RpcInterface::providers_valid_list(json::array,strProvider.begin(), strProvider.end(),[](const auto &x){return Value(String({"'",x.name}));});
@@ -45,6 +47,11 @@ static StrViewA userIndex = R"js(
 function(doc) {
 	if (doc.email) emit(doc.email);
 	if (doc.num_id) emit(doc.num_id);
+	if (doc.providers) {
+		for (var i in doc.providers) {
+			emit(doc.providers[i]);
+		}
+	}
 }
 )js";
 
@@ -135,6 +142,7 @@ void RpcInterface::initRPC(json::RpcServer &srv) {
 	srv.add("Login.login",this,&RpcInterface::rpcLogin);
 	srv.add("Login.signup",this,&RpcInterface::rpcSignup);
 	srv.add("Login.logoutAll",this,&RpcInterface::rpcLogoutAll);
+	srv.add("Login.addProvider",this,&RpcInterface::rpcAddProvider);
 	srv.add("Token.parse",this,&RpcInterface::rpcParseToken);
 	srv.add("User.setProfileData",this,&RpcInterface::rpcSetProfileData);
 	srv.add("User.getProfileData",this,&RpcInterface::rpcGetProfileData);
@@ -151,6 +159,7 @@ void RpcInterface::initRPC(json::RpcServer &srv) {
 	srv.add("Admin.delete",this,&RpcInterface::rpcAdminDelete);
 	srv.add("Admin.list",this,&RpcInterface::rpcAdminList);
 	srv.add("Admin.appList",this,&RpcInterface::rpcAdminAppList);
+	srv.add("Admin.genTokens",this,&RpcInterface::rpcAdminGenTokens);
 	srv.add("Admin.setUserEndpoints",this,&RpcInterface::rpcSetUserEndpoints);
 	srv.add("Admin.getUserEndpoints",this,&RpcInterface::rpcGetUserEndpoints);
 	srv.add("Admin.lastLogin",this,&RpcInterface::rpcGetLastLogin);
@@ -253,6 +262,30 @@ void RpcInterface::rpcCreateInvations(json::RpcRequest req) {
 	}
 }
 
+void RpcInterface::rpcAddProvider(json::RpcRequest req) {
+	static Value arglist = {"string"};
+	if (!req.checkArgs(arglist)) return req.setArgError();
+	Value token = checkJWTTime(parseJWT(req.getArgs()[0].getString(), jwt));
+	if (!token.hasValue()) return req.setError(401,"Token is not valid");
+	Value email = token["email"];
+	Value app = token["app"];
+	Value provider = token["provider"];
+	if (!provider.hasValue()) return req.setError(401,"Token is not valid");
+	auto ses = getSession(req);
+	if (ses.valid) {
+		Document doc = findUserByID(ses.uid);
+		{
+			auto providers = doc.object("providers");
+			providers.set(provider.getString(), email);
+		}
+		db->put(doc);
+		req.setResult(true);
+	}
+
+
+}
+
+
 void RpcInterface::sendWelcomeEmail(StrViewA email, StrViewA app) {
 
 	String appid ({"app.",app});
@@ -260,7 +293,11 @@ void RpcInterface::sendWelcomeEmail(StrViewA email, StrViewA app) {
 	Value emails = appdoc["emails"];
 	Value first_login = emails["first_login"];
 	if (first_login.hasValue()) {
-		sendmail.send(email, first_login.getString());
+		try {
+			sendmail.send(email, first_login.getString());
+		} catch (...) {
+			//sending e-mail failure is not reason to reject signup
+		}
 	}
 }
 
@@ -268,7 +305,7 @@ void RpcInterface::sendWelcomeEmail(StrViewA email, StrViewA app) {
 Value RpcInterface::token_rejected ("token_rejected");
 
 
-Value RpcInterface::verifyLoginAndFindUser(Provider provider, const StrViewA &token, Value &email, bool oldapi) {
+Value RpcInterface::verifyLoginAndFindUser(Provider provider, const StrViewA &token, Value &email, bool oldapi, json::StrViewA app) {
 	Value userdoc;
 	switch (provider) {
 	case RpcInterface::email:
@@ -293,6 +330,14 @@ Value RpcInterface::verifyLoginAndFindUser(Provider provider, const StrViewA &to
 		email = getGoogleAccountId(token);
 		userdoc = findUserByEMail(email.getString());
 		break;
+	case RpcInterface::trezor: {
+		Value appdoc = getApp(app);
+		auto z =  getTrezorAccountId(token, appdoc["trezor_challenge"].getString());
+		if (z.empty()) return token_rejected;
+		email =  z + "@trezor";
+		userdoc = findUserByEMail(email.getString());
+	}
+
 	}
 	return userdoc;
 }
@@ -317,11 +362,11 @@ void RpcInterface::rpcLogin(json::RpcRequest req) {
 	auto exp = args["exp"].getValueOrDefault(15);
 	auto admin = args["admin"].getBool();
 	Provider provider = strProvider[args["provider"].getString()];
-	Value userdoc = verifyLoginAndFindUser(provider, token, email, false);
+	Value userdoc = verifyLoginAndFindUser(provider, token, email, false, app);
 	if (userdoc == nullptr) {
 		req.setResult(Object
 				("new_user",true)
-				("signup_token", createSignupToken(email,app)));
+				("signup_token", createSignupToken(strProvider[provider],email,app)));
 	} else if (userdoc.isCopyOf(token_rejected)) {
 		req.setError(403, "Invalid credentials");
 	} else {
@@ -669,6 +714,7 @@ void RpcInterface::rpcSignup(json::RpcRequest req) {
 	if (!token.hasValue()) return req.setError(401,"Token is not valid");
 	Value email = token["email"];
 	Value app = token["app"];
+	Value provider = token["provider"];
 	Value invation = req.getArgs()[2];
 	if (invations) {
 		if (!invation.hasValue()) return req.setError(417, "Invation required");
@@ -680,6 +726,7 @@ void RpcInterface::rpcSignup(json::RpcRequest req) {
 	if (!trydoc.hasValue()) {
 		Document doc = db->newDocument("u");
 		doc.set("email", email);
+		doc.set("providers",Object(provider.getString(), email));
 		doc.set("cppd", req.getArgs()[1].getBool());
 		doc.set("invation", invations?invation:Value());
 		trydoc = doc;
@@ -707,12 +754,13 @@ json::Value RpcInterface::createRefreshToken(json::Value userId, bool temp) {
 }
 
 
-json::Value RpcInterface::createSignupToken(json::Value email, json::Value app) {
+json::Value RpcInterface::createSignupToken(json::Value provider, json::Value email, json::Value app) {
 	auto tp = std::chrono::system_clock::now();
 	auto e = tp + std::chrono::hours(1);
 	Object payload;
 	payload.set("email", email)
 			   ("app", app)
+			   ("provider", provider)
 			   ("iat", std::chrono::duration_cast<std::chrono::seconds>(tp.time_since_epoch()).count())
 			   ("exp", std::chrono::duration_cast<std::chrono::seconds>(e.time_since_epoch()).count())
 			   ("sub", "sgnup");
@@ -1059,4 +1107,30 @@ RpcInterface::AppInfo RpcInterface::getAppInfoFromDoc(json::StrViewA appId, json
 	if (!e.hasValue()) e = endpoints["_default"];
 
 	return AppInfo{true,res_appId,e};
+}
+
+void RpcInterface::rpcAdminGenTokens(json::RpcRequest req) {
+	if (!req.checkArgs({"number",Object
+		("exp","number")
+		("app","string")
+		("roles",{{json::array,"string"},"undefined"})
+	})) return req.setArgError();
+
+	auto count = req.getArgs()[0].getUInt();
+	Value cntr  = req.getArgs()[1];
+	auto exp = cntr["exp"].getUInt();
+	auto app = cntr["app"].getString();
+	auto roles = cntr["roles"];
+	auto ses = getSession(req);
+	if (ses.valid) {
+		if (ses.admin) {
+			Array resp;
+			for (decltype(count) i = 0; i < count; i++) {
+				Value uid = db->genUID("r");
+				auto s = createSession(uid, exp, app,false,roles);
+				resp.push_back(s.first);
+			}
+			req.setResult(resp);
+		}
+	}
 }
