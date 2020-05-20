@@ -45,11 +45,11 @@ Value RpcInterface::providers_valid_list(json::array,strProvider.begin(), strPro
 
 static StrViewA userIndex = R"js(
 function(doc) {
-	if (doc.email) emit(doc.email);
+	if (doc.email) emit(doc.email.toLowerCase());
 	if (doc.num_id) emit(doc.num_id);
 	if (doc.providers) {
 		for (var i in doc.providers) {
-			emit(doc.providers[i]);
+			emit(doc.providers[i].toLowerCase());
 		}
 	}
 }
@@ -649,10 +649,15 @@ json::Value RpcInterface::loginToken(json::StrViewA token) {
 	return token_rejected;
 }
 
+String toLower(String x) {
+	auto str = x.wstr();
+	std::transform(str.begin(), str.end(), str.begin(), std::towlower);
+	return String(StrViewW(str));
+}
 
 json::Value RpcInterface::findUserByEMail(StrViewA email) {
 	auto q = db->createQuery(userIndexView);
-	Result res = q.includeDocs().key(email).exec();
+	Result res = q.includeDocs().key(toLower(email)).exec();
 	if (res.empty()) {
 		return nullptr;
 	}
