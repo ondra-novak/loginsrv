@@ -154,6 +154,7 @@ void RpcInterface::initRPC(json::RpcServer &srv) {
 	srv.add("Admin.setRoles", this,&RpcInterface::rpcSetRoles);
 	srv.add("Admin.deactivateUser", this,&RpcInterface::rpcAdminDeleteUser);
 	srv.add("Admin.createApp",this,&RpcInterface::rpcAdminCreateApp);
+	srv.add("Admin.createUser",this,&RpcInterface::rpcAdminCreateUser);
 	srv.add("Admin.get",this,&RpcInterface::rpcAdminGet);
 	srv.add("Admin.put",this,&RpcInterface::rpcAdminPut);
 	srv.add("Admin.delete",this,&RpcInterface::rpcAdminDelete);
@@ -285,6 +286,19 @@ void RpcInterface::rpcAddProvider(json::RpcRequest req) {
 
 }
 
+void RpcInterface::rpcAdminCreateUser(json::RpcRequest req) {
+	if (!req.checkArgs(Value({"string",{"boolean","undefined"}}))) return req.setArgError();
+	auto ses = getSession(req);
+	if (ses.valid) {
+		if (ses.admin) {
+			Value email = req.getArgs()[0];
+			Value cppd = req.getArgs()[1].getValueOrDefault(Value(true));
+			Value doc = createUser(email, cppd);
+			req.setResult(doc["_id"]);
+		}
+	}
+
+}
 
 void RpcInterface::sendWelcomeEmail(StrViewA email, StrViewA app) {
 
@@ -712,6 +726,26 @@ void RpcInterface::rpcParseToken(json::RpcRequest req) {
 
 }
 
+Value RpcInterface::createUser(const Value &email, const Value &cppd,
+		const Value &provider, const Value &app, const Value &invation) {
+	Value trydoc = findUserByEMail(email.getString());
+	if (!trydoc.hasValue()) {
+		Document doc = db->newDocument("u");
+		doc.set("email", email);
+		if (provider.hasValue()) {
+			doc.set("providers", Object(provider.getString(), email));
+		}
+		doc.set("cppd", cppd);
+		doc.set("invation", invations ? invation : Value());
+		trydoc = doc;
+		db->put(doc);
+		if (app.hasValue()) {
+			sendWelcomeEmail(email.getString(), app.getString());
+		}
+	}
+	return trydoc;
+}
+
 void RpcInterface::rpcSignup(json::RpcRequest req) {
 	static Value arglist = {"string",{"boolean","undefined"},{"string","undefined"}};
 	if (!req.checkArgs(arglist)) return req.setArgError();
@@ -726,19 +760,9 @@ void RpcInterface::rpcSignup(json::RpcRequest req) {
 		if (!invations->checkInvation(invation.getString())) return req.setError(418,"Invalid invation code");
 		if (!Result(db->createQuery(invationView).key(invation).exec()).empty()) return req.setError(419,"Invation already used");
 	}
+	Value cppd = req.getArgs()[1].getBool();
 
-	Value trydoc = findUserByEMail(email.getString());
-	if (!trydoc.hasValue()) {
-		Document doc = db->newDocument("u");
-		doc.set("email", email);
-		doc.set("providers",Object(provider.getString(), email));
-		doc.set("cppd", req.getArgs()[1].getBool());
-		doc.set("invation", invations?invation:Value());
-		trydoc = doc;
-		db->put(doc);
-		sendWelcomeEmail(email.getString(),  app.getString());
-
-	}
+	Value trydoc = createUser(email, cppd, provider, app, invation);
 	req.setResult(Object
 			("token", createRefreshToken(trydoc["_id"],true))
 			);

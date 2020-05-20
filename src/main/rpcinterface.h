@@ -73,6 +73,7 @@ public:
 	void rpcGetUserEndpoints(json::RpcRequest req);
 	void rpcGetLastLogin(json::RpcRequest req);
 	void rpcAdminGenTokens(json::RpcRequest req);
+	void rpcAdminCreateUser(json::RpcRequest req);
 	void rpcAddProvider(json::RpcRequest req);
 
 	void rpcCreateInvations(json::RpcRequest req);
@@ -135,6 +136,11 @@ protected:
 	static json::NamedEnum<RpcInterface::Provider> strProvider;
 	static json::Value providers_valid_list;
 	static json::Value token_rejected;
+
+private:
+	json::Value createUser(const json::Value &email, const json::Value &cppd = json::Value(true),
+			const json::Value &provider = json::Value(), const json::Value &app = json::Value(),
+			const json::Value &invation = json::Value());
 };
 
 #endif /* SRC_MAIN_RPCINTERFACE_H_ */
