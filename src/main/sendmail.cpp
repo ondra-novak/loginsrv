@@ -15,11 +15,7 @@ SendMail::SendMail(const std::string &sendmail_path):sendmail_path(sendmail_path
 
 bool is_email_valid(const std::string& email)
 {
-   // define a regular expression
-   const std::regex pattern
-      ("([a-zA-Z0-9.+]|-)+@(\\w+)(\\.(\\w+))+");
-
-   // try to match the string with the regular expression
+   const std::regex pattern ("[-a-zA-Z0-9.+]+@[a-z0-9A-Z-_]+(\.[a-z0-9A-Z-_]+)+");
    return std::regex_match(email, pattern);
 }
 
