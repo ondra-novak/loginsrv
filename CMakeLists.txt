@@ -16,4 +16,23 @@ add_subdirectory (src/couchit/src/couchit EXCLUDE_FROM_ALL)
 add_subdirectory (src/simpleServer/src/simpleServer  EXCLUDE_FROM_ALL)
 add_subdirectory (src/simpleServer/src/rpc EXCLUDE_FROM_ALL)
 add_subdirectory (src/main) 
-  
+
+
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+  set(CMAKE_INSTALL_PREFIX "/opt/loginserver" CACHE PATH "Default path to install" FORCE)
+endif()
+
+install(PROGRAMS bin/loginserver DESTINATION bin)
+install(DIRECTORY DESTINATION log)
+install(DIRECTORY DESTINATION run)
+install(FILES conf/loginserver.dist.conf DESTINATION conf RENAME loginserver.conf) 
+install(FILES conf/master.conf DESTINATION conf)
+install(FILES conf/security.conf DESTINATION conf)
+
+
+SET(CPACK_GENERATOR "DEB")
+set(CPACK_SET_DESTDIR true)
+set(CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS true)
+SET(CPACK_DEBIAN_PACKAGE_MAINTAINER "KK") #required
+INCLUDE(CPack)
+

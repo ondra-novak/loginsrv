@@ -61,7 +61,6 @@ PECKey initKey(const ondra_shared::IniConfig::Section &s) {
 int App::run(ServiceControl &cntr, ArgList) {
 	auto section_server = config["server"];
 	cntr.changeUser(section_server["user"].getString());
-	cntr.enableRestart();
 
 	auto db = initDB(config["database"]);
 	auto chdist = std::make_shared<couchit::ChangesDistributor>(*db);
@@ -108,9 +107,12 @@ int App::run(ServiceControl &cntr, ArgList) {
     });
     rpcifc->initRPC(server);
 
-    if (config["num_ids"]["enable"].getBool()) {
+    if (config["num_ids"].mandatory["enable"].getBool()) {
     	rpcifc->initNumIDSvc(*chdist);
     }
+
+	cntr.enableRestart();
+
 
     chdist->runService([]{
     		try {throw;} catch (std::exception &e) {

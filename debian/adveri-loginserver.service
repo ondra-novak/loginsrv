@@ -1,0 +1,16 @@
+[Unit]
+Description=Adveri Loginserver
+After=network-online.target
+
+[Service]
+Type=simple
+User=adveri-loginserver
+ExecStart=/opt/loginserver/bin/loginserver run
+ExecStop=/opt/loginserver/bin/loginserver stop
+RemainAfterExit=no
+Restart=on-abnormal
+RestartSec=1s
+
+
+[Install]
+WantedBy=multi-user.target

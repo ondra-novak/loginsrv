@@ -1,0 +1,14 @@
+Source: adveri-loginserver
+Section: unknown
+Priority: optional
+Maintainer: Ondra Novak <nov.ondrej@gmail.com>
+#Build-Depends: debhelper-compat (= 12)
+Standards-Version: 4.4.1
+Homepage: www.happyfeed.com
+
+Package: adveri-loginserver
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: loginserver for adveri
+
+

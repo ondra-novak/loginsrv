@@ -1,0 +1,6 @@
+/adveri-loginserver/
+/debian/
+files
+*.debhelper
+*.substvars
+substvars

@@ -15,3 +15,5 @@ Makefile
 /www/fav_*.png
 generated
 *.a
+*.deb
+/install_manifest.txt
