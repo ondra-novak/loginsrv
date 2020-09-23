@@ -28,11 +28,3 @@ install(DIRECTORY DESTINATION run)
 install(FILES conf/loginserver.dist.conf DESTINATION conf RENAME loginserver.conf) 
 install(FILES conf/master.conf DESTINATION conf)
 install(FILES conf/security.conf DESTINATION conf)
-
-
-SET(CPACK_GENERATOR "DEB")
-set(CPACK_SET_DESTDIR true)
-set(CPACK_DEBIAN_PACKAGE_GENERATE_SHLIBS true)
-SET(CPACK_DEBIAN_PACKAGE_MAINTAINER "KK") #required
-INCLUDE(CPack)
-
