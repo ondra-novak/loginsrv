@@ -1,3 +1,4 @@
+#include <thread>
 #include <couchit/config.h>
 #include <couchit/couchDB.h>
 #include <imtjson/jwtcrypto.h>
@@ -114,9 +115,11 @@ int App::run(ServiceControl &cntr, ArgList) {
 	cntr.enableRestart();
 
 
-    chdist->runService([]{
+    chdist->runService([nxt = std::chrono::system_clock::now()]() mutable {
     		try {throw;} catch (std::exception &e) {
     			logError("Exception in dispatcher: $1", e.what());
+    			std::this_thread::sleep_until(nxt);
+    			nxt = std::chrono::system_clock::now()+std::chrono::minutes(1);
     		}
     		return true;
     });
