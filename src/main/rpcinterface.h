@@ -76,6 +76,10 @@ public:
 	void rpcAdminCreateUser(json::RpcRequest req);
 	void rpcAddProvider(json::RpcRequest req);
 
+	void rpcUserId2Index(json::RpcRequest req);
+	void rpcUserIndex2Id(json::RpcRequest req);
+
+
 	void rpcCreateInvations(json::RpcRequest req);
 
 	struct SessionInfo {
