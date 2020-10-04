@@ -1,6 +1,18 @@
+adveri-loginserver (1.0.3) unstable; urgency=medium
+
+  * Fix reset initial wait to zero after successul connect
+
+ -- Ondra Novak <nov.ondrej@gmail.com>  Sun, 4 Oct 2020 10:54:00 +0200
+
+adveri-loginserver (1.0.2) unstable; urgency=medium
+
+  * Fix allow to wait for database if it is unavailable
+
+ -- Ondra Novak <nov.ondrej@gmail.com>  Wed, 30 Sep 2020 22:15:00 +0200
+
 adveri-loginserver (1.0.1) unstable; urgency=medium
 
-  * Fix floor log when database is unavailable
+  * Fix flood log when database is unavailable
 
  -- Ondra Novak <nov.ondrej@gmail.com>  Mon, 28 Sep 2020 23:56:00 +0200
 

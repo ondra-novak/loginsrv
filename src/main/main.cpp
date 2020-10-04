@@ -1,6 +1,7 @@
 #include <thread>
 #include <couchit/config.h>
 #include <couchit/couchDB.h>
+#include <couchit/exception.h>
 #include <imtjson/jwtcrypto.h>
 #include <rpc/rpcServer.h>
 #include <imtjson/rpc.h>
@@ -115,11 +116,17 @@ int App::run(ServiceControl &cntr, ArgList) {
 	cntr.enableRestart();
 
 
-    chdist->runService([nxt = std::chrono::system_clock::now()]() mutable {
-    		try {throw;} catch (std::exception &e) {
+    chdist->runService([]() mutable {
+    		try {
+    			throw;
+    		}
+    		catch (couchit::RequestError &e) {
+    			if (e.getCode() != 0) logError("Database error: $1", e.what());
+    			std::this_thread::sleep_for(std::chrono::seconds(1));
+    		}
+    		catch (std::exception &e) {
     			logError("Exception in dispatcher: $1", e.what());
-    			std::this_thread::sleep_until(nxt);
-    			nxt = std::chrono::system_clock::now()+std::chrono::minutes(1);
+    			std::this_thread::sleep_for(std::chrono::seconds(1));
     		}
     		return true;
     });
