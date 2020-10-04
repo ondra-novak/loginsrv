@@ -6,7 +6,7 @@ set -e
 case "$1" in
     configure)
     	adduser --system --no-create-home adveri-loginserver
-    	chown -Rv adveri-loginserver /opt/loginserver 
+    	chown -R adveri-loginserver /opt/loginserver 
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)
