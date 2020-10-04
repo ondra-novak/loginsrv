@@ -149,6 +149,8 @@ void RpcInterface::initRPC(json::RpcServer &srv) {
 	srv.add("User.setConsentPPD",this,&RpcInterface::rpcSetConsentPPD);
 	srv.add("User.whoami",this,&RpcInterface::rpcUserWhoami);
 	srv.add("User.delete", this, &RpcInterface::rpcUserDelete);
+	srv.add("User.id2index", this, &RpcInterface::rpcUserId2Index);
+	srv.add("User.index2id", this, &RpcInterface::rpcUserIndex2Id);
 	srv.add("Admin.findUser",this,&RpcInterface::rpcFindUser);
 	srv.add("Admin.loginAs", this,&RpcInterface::rpcLoginAs);
 	srv.add("Admin.setRoles", this,&RpcInterface::rpcSetRoles);
@@ -1162,4 +1164,35 @@ void RpcInterface::rpcAdminGenTokens(json::RpcRequest req) {
 			req.setResult(resp);
 		}
 	}
+}
+
+void RpcInterface::rpcUserId2Index(json::RpcRequest req) {
+	Result res (db->createQuery(0).keys(req.getArgs()).includeDocs().exec());
+	Value output = res.map([](Row rw)->Value{
+		Value z =  rw.doc["num_id"];
+		if (!z.hasValue()) return nullptr;
+		return z;
+	});
+	req.setResult(output);
+}
+
+void RpcInterface::rpcUserIndex2Id(json::RpcRequest req) {
+	Result res (db->createQuery(userIndexView).keys(req.getArgs()).exec());
+	auto p = res.begin();
+	Array output;
+	for (Value z: req.getArgs()) {
+		if (p == res.end()) {
+			output.push_back(nullptr);
+		} else {
+			Row rw(*p);
+			if (rw.key != z) {
+				output.push_back(nullptr);
+			} else {
+				++p;
+				output.push_back(rw.id.getString().startsWith("u")?rw.id:Value(nullptr));
+			}
+		}
+	}
+
+	req.setResult(output);
 }
