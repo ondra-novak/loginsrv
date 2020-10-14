@@ -17,3 +17,4 @@ generated
 *.a
 *.deb
 /install_manifest.txt
+*.log
