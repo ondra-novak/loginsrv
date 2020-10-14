@@ -1,3 +1,9 @@
+adveri-loginserver (1.0.4) unstable; urgency=medium
+
+  * Add special account
+
+ -- Ondra Novak <nov.ondrej@gmail.com>  Wed, 14 Oct 2020 13:14:30 +0200
+
 adveri-loginserver (1.0.3) unstable; urgency=medium
 
   * Fix reset initial wait to zero after successul connect
