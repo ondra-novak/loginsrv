@@ -2,6 +2,7 @@
 #include <couchit/config.h>
 #include <couchit/couchDB.h>
 #include <couchit/exception.h>
+#include <couchit/memview.h>
 #include <imtjson/jwtcrypto.h>
 #include <rpc/rpcServer.h>
 #include <imtjson/rpc.h>
@@ -60,6 +61,12 @@ PECKey initKey(const ondra_shared::IniConfig::Section &s) {
 	return PECKey(json::JWTCrypto_ES::importPrivateKey(256,BinaryView(key, sizeof(key))), &EC_KEY_free);
 }
 
+static void specAccountsView(const json::Value &doc, const couchit::EmitFn &emit) {
+	if (doc["force_code"].defined()) {
+		emit(doc["email"],doc["force_code"]);
+	}
+}
+
 int App::run(ServiceControl &cntr, ArgList) {
 	auto section_server = config["server"];
 	cntr.changeUser(section_server["user"].getString());
@@ -86,9 +93,12 @@ int App::run(ServiceControl &cntr, ArgList) {
     	invsvc = std::make_shared<InvationSvc>(std::string(key));
     }
 
+    couchit::MemView specAccounts((couchit::MemViewDef(specAccountsView)));
+    chdist->add(specAccounts);
+
     std::shared_ptr<RpcInterface> rpcifc;
     {
-    	RpcInterface::Config rpccfg{sendmail,jwt,db,*chdist,invsvc.get()};
+    	RpcInterface::Config rpccfg{sendmail,jwt,db,*chdist,specAccounts,invsvc.get()};
     	rpcifc = config["oldAPI"]["enable"].getBool(false)?
 						std::make_shared<RpcInterfaceOld>(std::move(rpccfg)):
 						std::make_shared<RpcInterface>(std::move(rpccfg));
@@ -131,6 +141,8 @@ int App::run(ServiceControl &cntr, ArgList) {
     		return true;
     });
     server.start();
+
+    specAccounts.update(*db);
 
 	cntr.dispatch();
 	chdist->stopService();

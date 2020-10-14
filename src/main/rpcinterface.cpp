@@ -122,6 +122,7 @@ RpcInterface::RpcInterface(const Config &cfg)
 		,dcache(new couchit::DocCache(*cfg.db,{}))
 		,emailCodes(cfg.db)
 		,invations(cfg.invationSvc)
+		,specAcc(cfg.specAcc)
 {
 	db->putDesignDocument(userIndexDDoc);
 	db->putDesignDocument(appIndexDDoc);
@@ -179,15 +180,20 @@ void RpcInterface::rpcRequestCode(json::RpcRequest req) {
 	if (!req.checkArgs({"string","string"}))
 		return req.setArgError();
 	auto args = req.getArgs();
-	StrViewA email = req[0].getString();
 	StrViewA app = req[1].getString();
-	int code = emailCodes.generateCode(email);
-	std::string body = generateCodeEmail(email, app, code);
-	try {
-		sendmail.send(email, body);
+
+	if (!isSpecAccount(req[0])) {
+		StrViewA email = req[0].getString();
+		int code = emailCodes.generateCode(email);
+		std::string body = generateCodeEmail(email, app, code);
+		try {
+			sendmail.send(email, body);
+			req.setResult(true);
+		} catch (std::exception &e) {
+			req.setError(400, e.what());
+		}
+	} else {
 		req.setResult(true);
-	} catch (std::exception &e) {
-		req.setError(400, e.what());
 	}
 }
 
@@ -325,7 +331,15 @@ Value RpcInterface::verifyLoginAndFindUser(Provider provider, const StrViewA &to
 	Value userdoc;
 	switch (provider) {
 	case RpcInterface::email:
-		userdoc = loginEmail(token, email.getString(), oldapi);
+		if (isSpecAccount(email)) {
+			if (checkSpecAccountPwd(email, token)) {
+				userdoc = findUserByEMail(email.getString());
+			}  else {
+				return token_rejected;
+			}
+		} else {
+			userdoc = loginEmail(token, email.getString(), oldapi);
+		}
 		break;
 	case RpcInterface::token:
 		userdoc = loginToken(token);
@@ -726,6 +740,17 @@ void RpcInterface::rpcParseToken(json::RpcRequest req) {
 			("time_valid", checkJWTTime(parsed).hasValue())
 			("content", parsed));
 
+}
+
+bool RpcInterface::isSpecAccount(json::Value id) const {
+	auto cntr = specAcc.direct();
+	return cntr.find(id) != cntr.end();
+}
+
+bool RpcInterface::checkSpecAccountPwd(json::Value id, StrViewA pwd) const {
+	auto cntr = specAcc.direct();
+	auto iter = cntr.find(id);
+	return iter != cntr.end() && iter->second.value().getString() == pwd;
 }
 
 Value RpcInterface::createUser(const Value &email, const Value &cppd,

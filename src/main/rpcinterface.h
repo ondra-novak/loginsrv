@@ -21,11 +21,14 @@ class InvationSvc;
 class RpcInterface {
 public:
 
+	using SpecAccView = couchit::MemView;
+
 	struct Config {
 		SendMail &sendmail;
 		json::PJWTCrypto jwt;
 		std::shared_ptr<couchit::CouchDB> db;
 		couchit::ChangesDistributor &chdist;
+		couchit::MemView &specAcc;
 		InvationSvc *invationSvc;
 	};
 
@@ -99,6 +102,7 @@ protected:
 	std::shared_ptr<couchit::DocCache> dcache;
 	EmailCodes emailCodes;
 	InvationSvc *invations;
+	couchit::MemView &specAcc;
 
 	std::string generateCodeEmail(ondra_shared::StrViewA email, ondra_shared::StrViewA app, int code);
 
@@ -140,6 +144,9 @@ protected:
 	static json::NamedEnum<RpcInterface::Provider> strProvider;
 	static json::Value providers_valid_list;
 	static json::Value token_rejected;
+
+	bool isSpecAccount(json::Value id) const;
+	bool checkSpecAccountPwd(json::Value id, StrViewA pwd) const;
 
 private:
 	json::Value createUser(const json::Value &email, const json::Value &cppd = json::Value(true),
