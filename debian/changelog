@@ -1,3 +1,9 @@
+adveri-loginserver (1.0.5) unstable; urgency=medium
+
+  * Fix invalid signature on token
+
+ -- Ondra Novak <nov.ondrej@gmail.com>  Thu, 5 NOV 2020 16:00:00 +0100
+
 adveri-loginserver (1.0.4) unstable; urgency=medium
 
   * Add special account

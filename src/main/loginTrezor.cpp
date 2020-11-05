@@ -61,20 +61,6 @@ static std::string hex2bin(const std::string_view &hex) {
 	return out;
 }
 
-static std::string bin2hex(const std::string_view &bin) {
-	auto l = bin.length();
-	std::string out;
-	out.reserve(l*2);
-	for (decltype(l) i = 0; i < l; i+=2) {
-		unsigned char x = bin[i];
-		char c = (x >> 4);
-		if (c >= 10) out.push_back(c+'a'-10); else out.push_back(c+'0');
-		c = (x & 0xF);
-		if (c >= 10) out.push_back(c+'a'-10); else out.push_back(c+'0');
-	}
-	return out;
-}
-
  void numToVarIntString(std::string &appstr, unsigned int val) {
         if (val < 0xfd) {
         	appstr.push_back(val);
