@@ -12,6 +12,7 @@
 #include <main/sendmail.h>
 #include <openssl/sha.h>
 #include <shared/default_app.h>
+#include <shared/linux_crash_handler.h>
 #include <shared/logOutput.h>
 #include <shared/stringview.h>
 #include <simpleServer/abstractService.h>
@@ -123,6 +124,11 @@ int App::run(ServiceControl &cntr, ArgList) {
     	rpcifc->initNumIDSvc(*chdist);
     }
 
+    server.addPath("/_up",[&](simpleServer::HTTPRequest req, StrViewA) {
+    	db->createQuery(0).limit(0).exec();
+    	req.sendResponse("text/plain","OK");
+    	return true;
+    });
 	cntr.enableRestart();
 
 
@@ -175,14 +181,22 @@ void App::showHelp(const std::initializer_list<Switch> &defsw) {
 	for (const char *c : commands) wordwrap(c);
 }
 
+static ondra_shared::CrashHandler report_crash([](const char *line) {
+	ondra_shared::logFatal("CrashReport: $1", line);
+});
+
 int main(int argc, char **argv) {
 
 	App app;
+
 
 	if (!app.init(argc, argv)) {
 		std::cerr << "Invalid arguments. Use -h for help" << std::endl;
 		return 1;
 	}
+
+	report_crash.install();
+
 	try {
 
 		StrViewA cmd = app.args->getNext();

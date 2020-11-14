@@ -420,7 +420,7 @@ json::Value RpcInterface::NumIDGen::getLastKnownSeqID() const {
 }
 bool RpcInterface::NumIDGen::onEvent(const couchit::ChangeEvent &ev) {
 
-	while (!ev.doc["num_id"].hasValue() && !ev.deleted) {
+	if (!ev.doc["num_id"].hasValue() && !ev.deleted && ev.id[0] != '_') {
 		std::size_t lastId = 0;
 		auto q = db.createQuery(userIndexView);
 		Result res = q.range(0,"").reversedOrder().limit(1).exec();
@@ -431,16 +431,9 @@ bool RpcInterface::NumIDGen::onEvent(const couchit::ChangeEvent &ev) {
 		Document doc(ev.doc);
 		doc.set("num_id", lastId+1);
 		if (lastId == 0) doc.set("admin",true);
-		auto chset = db.createChangeset();
-		chset.update(doc);
+		db.put(doc,{true,false,1,true,nullptr});
 		lastIdDoc("lastId", ev.seqId);
-		chset.update(lastIdDoc);
-		try {
-			chset.commit();
-			return true;
-		} catch (couchit::UpdateException &e) {
-			if (!e.getError(0).isConflict()) throw;
-		}
+		db.put(lastIdDoc);
 	}
 	return true;
 }
@@ -621,14 +614,11 @@ json::Value RpcInterface::loginByDoc(couchit::Document &&doc, StrViewA app, int 
 	auto appinfo = getAppInfo(app, doc.getBaseObject(), admin);
 	if (!appinfo.valid) throw std::runtime_error("Unknown application id");
 	if (storeLastLogin)	{
-		try {
+		{
 			auto lastLogin = doc.object("lastLogin");
 			lastLogin.set(app,std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
-			db->put(doc);
-		} catch (couchit::UpdateException &e) {
-			if (!e.getError(0).isConflict()) throw;
-			//ignore conflict as it is only record of lastLogin. If there is multiple logins at once, no need to record it separatedly
 		}
+		db->put(doc,{true,false,1,true,nullptr},true);
 	}
 	bool enable_admin = doc["admin"].getBool() && admin;
 	auto sesinfo = createSession(doc.getID(), exp, appinfo.appId.getString(), enable_admin, roles);
@@ -652,6 +642,7 @@ json::Value RpcInterface::loginByDoc(couchit::Document &&doc, StrViewA app, int 
 
 
 json::Value RpcInterface::loginEmail(json::StrViewA token, json::StrViewA email, bool oldapi) {
+	if (token.empty()) return token_rejected;
 	int v = std::atoi(token.data);
 	if (emailCodes.checkCode(email,v,oldapi)) {
 		Value doc = findUserByEMail(email);
@@ -764,8 +755,9 @@ Value RpcInterface::createUser(const Value &email, const Value &cppd,
 		}
 		doc.set("cppd", cppd);
 		doc.set("invation", invations ? invation : Value());
+		doc.set("createTime",std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
 		trydoc = doc;
-		db->put(doc);
+		db->put(doc,{true,false,1,true,nullptr},false);
 		if (app.hasValue()) {
 			sendWelcomeEmail(email.getString(), app.getString());
 		}
