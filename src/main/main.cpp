@@ -97,9 +97,11 @@ int App::run(ServiceControl &cntr, ArgList) {
     couchit::MemView specAccounts((couchit::MemViewDef(specAccountsView)));
     chdist->add(specAccounts);
 
+    unsigned int cacheSize = std::max<unsigned int>(config["user_cache"].mandatory["size"].getUInt(),100);
+
     std::shared_ptr<RpcInterface> rpcifc;
     {
-    	RpcInterface::Config rpccfg{sendmail,jwt,db,*chdist,specAccounts,invsvc.get()};
+    	RpcInterface::Config rpccfg{sendmail,jwt,db,*chdist,specAccounts,invsvc.get(), cacheSize};
     	rpcifc = config["oldAPI"]["enable"].getBool(false)?
 						std::make_shared<RpcInterfaceOld>(std::move(rpccfg)):
 						std::make_shared<RpcInterface>(std::move(rpccfg));

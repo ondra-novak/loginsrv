@@ -30,6 +30,7 @@ public:
 		couchit::ChangesDistributor &chdist;
 		couchit::MemView &specAcc;
 		InvationSvc *invationSvc;
+		unsigned int cacheSize;
 	};
 
 	enum Provider {

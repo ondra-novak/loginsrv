@@ -35,7 +35,7 @@ unsigned int EmailCodes::generateCode(json::String email) {
 	unsigned int dupreq = 0;
 	if (codes.hasValue()) {
 		codes = codes.filter([&](Value z){
-			if (z.getKey() == email && z["exp"].getIntLong() > now+800)
+			if (z.getKey() == email && z["exp"].getIntLong() > now+870)
 				dupreq = z["code"].getUInt();
 			return z["exp"].getIntLong() > now && z["tries"].getUInt() < 10;
 		});

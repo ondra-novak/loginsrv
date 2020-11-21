@@ -119,7 +119,7 @@ RpcInterface::RpcInterface(const Config &cfg)
 		:sendmail(cfg.sendmail)
 		,jwt(cfg.jwt)
 		,db(cfg.db)
-		,dcache(new couchit::DocCache(*cfg.db,{}))
+		,dcache(new couchit::DocCache(*cfg.db,{cfg.cacheSize,false,false,false,true}))
 		,emailCodes(cfg.db)
 		,invations(cfg.invationSvc)
 		,specAcc(cfg.specAcc)
@@ -235,7 +235,7 @@ static std::string replace_placeholders(std::string templ, std::string seq, std:
 std::string RpcInterface::generateCodeEmail(StrViewA email, StrViewA app, int code) {
 
 	String appid ({"app.",app});
-	Value appdoc = db->get(appid, db->flgNullIfMissing);
+	Value appdoc = dcache->get(appid);
 	Value emails = appdoc["emails"];
 	Value reqcode = emails["request_code"];
 	if (reqcode.hasValue()) {
@@ -311,7 +311,7 @@ void RpcInterface::rpcAdminCreateUser(json::RpcRequest req) {
 void RpcInterface::sendWelcomeEmail(StrViewA email, StrViewA app) {
 
 	String appid ({"app.",app});
-	Value appdoc = db->get(appid, db->flgNullIfMissing);
+	Value appdoc = dcache->get(appid);
 	Value emails = appdoc["emails"];
 	Value first_login = emails["first_login"];
 	if (first_login.hasValue()) {
@@ -448,7 +448,7 @@ void RpcInterface::rpcSetProfileData(json::RpcRequest req) {
 
 	auto ses = getSession(req);
 	if (ses.valid) {
-		Document doc ( db->get(ses.uid) );
+		Document doc ( dcache->get(ses.uid) );
 		Value rev = req.getArgs()[0];
 		Value content = req.getArgs()[1];
 		if (doc.getRevValue() == rev) {
@@ -471,7 +471,7 @@ void RpcInterface::rpcGetProfileData(json::RpcRequest req) {
 	if (!req.checkArgs({})) return req.setArgError();
 	auto ses = getSession(req);
 	if (ses.valid) {
-		Value doc = db->get(ses.uid);
+		Value doc = dcache->get(ses.uid);
 		req.setResult(Value({doc["_rev"], Object(doc["profile"])}));
 	}
 }
@@ -482,7 +482,7 @@ void RpcInterface::rpcSetConsentPPD(json::RpcRequest req) {
 	auto ses = getSession(req);
 	if (ses.valid) {
 		for(;;) {
-			Document doc = db->get(ses.uid);
+			Document doc = dcache->get(ses.uid);
 			doc.set("cppd", en);
 			try {
 				db->put(doc);
@@ -504,7 +504,7 @@ void RpcInterface::setResultAndContext(json::RpcRequest req, json::Value loginDa
 Value RpcInterface::searchUser(const Value &srch) {
 	Value doc;
 	if (srch.type() == json::string) {
-		doc = db->get(srch.getString(), CouchDB::flgNullIfMissing);
+		doc = dcache->get(srch.getString());
 	}
 	if (!doc.hasValue()) {
 		auto q = db->createQuery(userIndexView);
@@ -689,7 +689,7 @@ json::Value RpcInterface::findUserByEMail(StrViewA email) {
 }
 
 json::Value RpcInterface::findUserByID(StrViewA id) {
-	return db->get(id, CouchDB::flgNullIfMissing);
+	return dcache->get(id);
 }
 
 std::pair<json::Value,std::uint64_t> RpcInterface::createSession(json::Value userId, json::Value exp, json::Value app, bool admin, json::Value roles) {
@@ -849,10 +849,18 @@ void RpcInterface::rpcLogoutAll(json::RpcRequest req) {
 	auto ses = getSession(req);
 	if (ses.valid) {
 		auto now = std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch()).count();
-		Document doc = db->get(ses.uid);
-		doc.set("tokenRevokeTime", now);
-		db->put(doc);
-		req.setResult(true);
+		do {
+			try {
+				Document doc = dcache->get(ses.uid);
+				doc.set("tokenRevokeTime", now);
+				db->put(doc);
+				req.setResult(true);
+				return;
+			} catch (const couchit::UpdateException &e) {
+				if (!e.getError(0).isConflict()) throw;
+			}
+			dcache->erase(ses.uid);
+		} while(true);
 	}
 }
 
