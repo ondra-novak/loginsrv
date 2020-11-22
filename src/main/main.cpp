@@ -131,6 +131,8 @@ int App::run(ServiceControl &cntr, ArgList) {
     	req.sendResponse("text/plain","OK");
     	return true;
     });
+
+    server.addStats("/stats");
 	cntr.enableRestart();
 
 
