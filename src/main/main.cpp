@@ -18,6 +18,7 @@
 #include <simpleServer/abstractService.h>
 #include <simpleServer/address.h>
 #include <simpleServer/asyncProvider.h>
+#include <simpleServer/http_filemapper.h>
 #include <simpleServer/threadPoolAsync.h>
 #include <memory>
 
@@ -131,25 +132,16 @@ int App::run(ServiceControl &cntr, ArgList) {
     	req.sendResponse("text/plain","OK");
     	return true;
     });
+    auto webPath = config["web"]["path"].getPath(std::string());
+    if (!webPath.empty()) {
+    	server.addPath("", simpleServer::HttpFileMapper(std::move(webPath),"login.html"));
+    }
 
     server.addStats("/stats");
 	cntr.enableRestart();
 
 
-    chdist->runService([]() mutable {
-    		try {
-    			throw;
-    		}
-    		catch (couchit::RequestError &e) {
-    			if (e.getCode() != 0) logError("Database error: $1", e.what());
-    			std::this_thread::sleep_for(std::chrono::seconds(1));
-    		}
-    		catch (std::exception &e) {
-    			logError("Exception in dispatcher: $1", e.what());
-    			std::this_thread::sleep_for(std::chrono::seconds(1));
-    		}
-    		return true;
-    });
+    chdist->runService();
     server.start();
 
     specAccounts.update(*db);

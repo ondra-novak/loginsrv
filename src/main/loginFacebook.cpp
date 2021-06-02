@@ -29,12 +29,12 @@ json::String getFacebookAccountId(const json::StrViewA token) {
 	auto response = httpc.request("GET",url,SendHeaders());
 	if (response.getStatus() == 200) {
 		Value resp = Value::parse(response.getBody());
-		StrViewA email = resp["email"].getString();
+		json::String email = resp["email"].toString();
 		if (email.empty())  {
-			throw std::runtime_error("Token doesn't contain e-mail");
-		} else {
-			return email;
+			if (!resp["id"].defined()) throw std::runtime_error("Malformed facebook response");
+			email = json::String {resp["id"].toString(),"@facebook"};
 		}
+		return email;
 	} else {
 		throw std::runtime_error("Failed to validate token: code "+std::to_string(response.getStatus()));
 	}

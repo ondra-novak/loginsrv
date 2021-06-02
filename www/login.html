@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="stylesheet" href="login.css">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="login.png">
+<body onload="main();">
+	<div class="popup_container">
+		<div class="window" id="choose_provider" hidden="hidden">
+			<div class="logo"></div>
+			<div class="vertical">
+				<button id="provider_email">
+					<img src="imgs/login_email.png"><span>E-mail</span>
+				</button>
+				<button id="provider_trezor" hidden="hidden">
+					<img src="imgs/login_trezor.png"><span>Trezor</span>
+				</button>
+				<button id="provider_facebook" class="errframe facebook_err"  hidden="hidden">
+					<img src="imgs/login_facebook.png"><span>Facebook</span>
+				</button>
+				<div class="errtext facebook_err">An error occured, please try again!</div>
+				<button id="provider_google" class="errframe google_err"  hidden="hidden">
+					<img src="imgs/login_google.png"><span>Google</span>
+				</button>
+				<div class="errtext google_err">An error occured, please try again!</div>
+			</div>
+		</div>
+
+
+		<div class="window" id="email_enter" hidden="hidden">
+			<div class="logo"></div>
+			<div class="vertical">
+				<div class="label">Your e-mail address</div>
+				<input type="text" id="email_address" class="errframe err_empty" placeholder="mmbot.user@email.com">
+				<div class="errtext err_empty">Please enter valid email</div>
+				<div class="horizontal">
+					<button id="email_enter_back">&lt;&lt; Back</button>
+					<button id="email_enter_next">Next &gt;&gt;</button>
+				</div>
+			</div>
+		</div>
+
+		<div class="window" id="email_code_enter" hidden="hidden">
+			<div class="logo"></div>
+			<div class="vertical">
+				<div class="label">Check your mailbox for an authentification code</div>
+				<div class="label">Enter received code below</div>
+				<input type="number" id="email_code" placeholder="000000" class="errframe err_invcode">
+				<div class="errtext err_invcode">Entered invalid code</div>
+				<div class="horizontal">
+					<button id="email_code_back">&lt;&lt; Back</button>
+					<button id="email_code_next">Login</button>
+				</div>
+			</div>
+		</div>
+
+		<div class="window" id="new_account_option" hidden="hidden">
+			<div class="logo"></div>
+			<div class="vertical">
+				<div class="label">Welcome a new user</div>
+				<button id="new_account_create"><img src="imgs/login_new.png"><span>New account</span></button>
+				<button id="new_account_connect"><img src="imgs/login_connect.png"><span>Connect existing</span></button>
+				<button id="new_account_back"><img src="imgs/login_startover.png"><span>Start over</span></button>
+			</div>
+		</div>
+
+
+		<div class="toptoast" id="top_toast" hidden="hidden">
+			<img src="imgs/login_connect.png"><span>Connecting existing account</span><button id="stop_connect">Stop</button>
+		</div>
+
+	</div>
+
+<script type="text/javascript" src="libs/login.js"></script>
+</body>
+</html>
