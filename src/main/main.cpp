@@ -112,7 +112,7 @@ int App::run(ServiceControl &cntr, ArgList) {
     RpcHttpServer server(bind_addr, asyncProvider);
 	server.setHostMapping(section_server["mapHosts"].getString(""));
 
-    server.addRPCPath("/RPC");
+    server.addRPCPath("/RPC", {true,true,true,65536,true});
     server.add_ping();
     server.add_listMethods();
     server.addPath("/public_key",[&](simpleServer::HTTPRequest req, StrViewA ) {
