@@ -5,8 +5,8 @@ set -e
 
 case "$1" in
     configure)
-    	adduser --system --no-create-home adveri-loginserver
-    	chown -R adveri-loginserver /opt/loginserver 
+    	adduser --system --no-create-home ondra_loginserver
+    	chown -R ondra_loginserver /opt/loginserver 
     ;;
 
     abort-upgrade|abort-remove|abort-deconfigure)

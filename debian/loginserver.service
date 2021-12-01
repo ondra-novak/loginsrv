@@ -4,7 +4,7 @@ After=network-online.target
 
 [Service]
 Type=simple
-User=adveri-loginserver
+User=ondra_loginserver
 ExecStart=/opt/loginserver/bin/loginserver run
 ExecStop=/opt/loginserver/bin/loginserver stop
 RemainAfterExit=no
