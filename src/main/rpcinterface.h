@@ -14,6 +14,7 @@
 #include <imtjson/namedEnum.h>
 #include <imtjson/rpc.h>
 #include <main/emailcodes.h>
+#include <userver/http_client.h>
 #include "sendmail.h"
 
 class InvationSvc;
@@ -29,7 +30,6 @@ public:
 		std::shared_ptr<couchit::CouchDB> db;
 		couchit::ChangesDistributor &chdist;
 		couchit::MemView &specAcc;
-		InvationSvc *invationSvc;
 		unsigned int cacheSize;
 	};
 
@@ -84,8 +84,6 @@ public:
 	void rpcUserIndex2Id(json::RpcRequest req);
 
 
-	void rpcCreateInvations(json::RpcRequest req);
-
 	struct SessionInfo {
 		bool valid = false;
 		bool admin = false;
@@ -105,29 +103,29 @@ protected:
 	InvationSvc *invations;
 	couchit::MemView &specAcc;
 
-	std::string generateCodeEmail(ondra_shared::StrViewA email, ondra_shared::StrViewA app, int code);
+	std::string generateCodeEmail(std::string_view email, std::string_view app, int code);
 
-	json::Value loginEmail(json::StrViewA token, json::StrViewA email, bool oldapi);
-	json::Value loginToken(json::StrViewA token);
+	json::Value loginEmail(std::string_view token, std::string_view email);
+	json::Value loginToken(std::string_view token);
 
 
-	json::Value findUserByEMail(json::StrViewA email);
+	json::Value findUserByEMail(std::string_view email);
 
-	json::Value findUserByID(json::StrViewA email);
+	json::Value findUserByID(std::string_view email);
 
 	std::pair<json::Value,std::uint64_t> createSession(json::Value userId, json::Value exp, json::Value app, bool admin, json::Value roles);
 	json::Value createRefreshToken(json::Value userId, bool temp = false);
 	json::Value createSignupToken(json::Value provider, json::Value email, json::Value app);
-	json::Value loginByDoc(couchit::Document &&doc, json::StrViewA app, int exp, bool admin, json::Value roles, bool storeLastLogin);
+	json::Value loginByDoc(couchit::Document &&doc, std::string_view app, int exp, bool admin, json::Value roles, bool storeLastLogin);
 
 	void setResultAndContext(json::RpcRequest req, json::Value loginData);
 	json::Value searchUser(const json::Value &srch);
 
-	json::Value verifyLoginAndFindUser(Provider provider, const json::StrViewA &token,	json::Value &email, bool oldapi, json::StrViewA app);
+	json::Value verifyLoginAndFindUser(Provider provider, const std::string_view &token,json::Value &email, std::string_view app);
 	void deactivateUser(couchit::Document &&doc);
 
-	json::Value getApp(json::StrViewA appId);
-	json::Value findApp(json::StrViewA appId);
+	json::Value getApp(std::string_view appId);
+	json::Value findApp(std::string_view appId);
 
 	class NumIDGen;
 
@@ -137,17 +135,19 @@ protected:
 		json::Value endpoints;
 	};
 
-	AppInfo getAppInfo(json::StrViewA appId, json::Value userdoc, bool force);
-	AppInfo getAppInfoFromDoc(json::StrViewA appId, json::Value app, json::Value userdoc);
+	AppInfo getAppInfo(std::string_view appId, json::Value userdoc, bool force);
+	AppInfo getAppInfoFromDoc(std::string_view appId, json::Value app, json::Value userdoc);
 
-	void sendWelcomeEmail(StrViewA email, StrViewA app);
+	void sendWelcomeEmail(std::string_view email, std::string_view app);
 
 	static json::NamedEnum<RpcInterface::Provider> strProvider;
 	static json::Value providers_valid_list;
 	static json::Value token_rejected;
 
 	bool isSpecAccount(json::Value id) const;
-	bool checkSpecAccountPwd(json::Value id, StrViewA pwd) const;
+	bool checkSpecAccountPwd(json::Value id, std::string_view pwd) const;
+
+	userver::HttpClient httpc;
 
 private:
 	json::Value createUser(const json::Value &email, const json::Value &cppd = json::Value(true),

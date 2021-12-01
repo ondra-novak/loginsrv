@@ -8,38 +8,33 @@
 #include <imtjson/parser.h>
 #include <imtjson/string.h>
 #include <imtjson/value.h>
-#include <simpleServer/http_client.h>
-#include <simpleServer/http_headers.h>
 
 #include "loginGoogle.h"
 
 using json::String;
 using json::Value;
-using simpleServer::HttpClient;
-using simpleServer::newHttpsProvider;
-using simpleServer::SendHeaders;
 
 
 
 
-json::String getGoogleAccountId(const json::StrViewA token) {
-	HttpClient httpc(StrViewA(), newHttpsProvider());
+json::String getGoogleAccountId(userver::HttpClient &httpc, const std::string_view &token) {
 	String url;
-	if (token.startsWith("eyJ"))
+	if (token.substr(0,3) == "eyJ")
 		url = String({"https://oauth2.googleapis.com/tokeninfo?id_token=",token});
 	else
 		url = String({"https://oauth2.googleapis.com/tokeninfo?access_token=",token});
-	auto response = httpc.request("GET",url,SendHeaders());
-	if (response.getStatus() == 200) {
-		Value resp = Value::parse(response.getBody());
-		StrViewA email = resp["email"].getString();
+	auto response = httpc.GET(url,{});
+	if (response->getStatus() == 200) {
+		userver::Stream &s = response->getResponse();
+		Value resp = Value::parse([&]{return s.getChar();});
+		auto email = resp["email"].getString();
 		if (email.empty())  {
 			throw std::runtime_error("Token doesn't contain e-mail");
 		} else {
 			return email;
 		}
 	} else {
-		throw std::runtime_error("Failed to validate token: code "+std::to_string(response.getStatus()));
+		throw std::runtime_error("Failed to validate token: code "+std::to_string(response->getStatus()));
 	}
 }
 

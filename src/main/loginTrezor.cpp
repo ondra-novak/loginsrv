@@ -12,6 +12,7 @@
 #include <openssl/sha.h>
 #include <shared/logOutput.h>
 #include <shared/stringview.h>
+#include <userver/helpers.h>
 #include "loginTrezor.h"
 #include <ctime>
 
@@ -21,24 +22,21 @@ using ondra_shared::logDebug;
 using ondra_shared::StrViewA;
 
 
-static std::time_t parseDate(const json::StrViewA date, time_t now) {
+static std::time_t parseDate(std::string_view date, time_t now) {
 	std::tm t;
 	localtime_r(&now, &t);
-	auto splt1 = date.split(" ");
-	StrViewA dpart = splt1();
-	StrViewA tpart = splt1();
-	auto splt2 = dpart.split("-");
-	StrViewA str_y = splt2();
-	StrViewA str_m = splt2();
-	StrViewA str_d = splt2();
-	auto splt3 = tpart.split(":");
-	StrViewA str_h = splt3();
-	StrViewA str_n = splt3();
-	t.tm_min =  std::atoi(str_n.data);
-	t.tm_hour =  std::atoi(str_h.data);
-	t.tm_mday =  std::atoi(str_d.data);
-	t.tm_mon =  std::atoi(str_m.data)-1;
-	t.tm_year = std::atoi(str_y.data)-1900;
+	auto dpart = userver::splitAt(" ", date);
+	auto tpart = userver::splitAt(" ", date);
+	auto str_y = userver::splitAt("-", dpart);
+	auto str_m = userver::splitAt("-", dpart);
+	auto str_d = userver::splitAt("-", dpart);
+	auto str_h = userver::splitAt(":", tpart);
+	auto str_n = userver::splitAt(":", tpart);
+	t.tm_min =  std::atoi(str_n.data());
+	t.tm_hour =  std::atoi(str_h.data());
+	t.tm_mday =  std::atoi(str_d.data());
+	t.tm_mon =  std::atoi(str_m.data())-1;
+	t.tm_year = std::atoi(str_y.data())-1900;
 	return std::mktime(&t)+t.tm_gmtoff;
 }
 
@@ -76,15 +74,14 @@ static std::string hex2bin(const std::string_view &hex) {
 
  static const std::string msglead = "Bitcoin Signed Message:\n";
 
-json::String getTrezorAccountId(const json::StrViewA token, const json::StrViewA challenge_prefix) {
+json::String getTrezorAccountId(std::string_view token, std::string_view challenge_prefix) {
 
-	auto splt = token.split("|");
-	StrViewA pubKey = splt();
-	StrViewA signature = splt();
-	StrViewA challenge = splt();
-	if (!challenge.startsWith(challenge_prefix)) return String();
-	auto dbeg = challenge.indexOf("(", challenge_prefix.length)+1;
-	auto dend = challenge.indexOf(")", dbeg);
+	auto pubKey = userver::splitAt("|", token);
+	auto signature = userver::splitAt("|", token);
+	auto challenge = userver::splitAt("|", token);
+	if (challenge.substr(0,challenge_prefix.size()) != challenge_prefix) return String();
+	auto dbeg = challenge.find("(", challenge_prefix.length())+1;
+	auto dend = challenge.find(")", dbeg);
 	StrViewA date = challenge.substr(dbeg, dend-dbeg);
 	std::time_t now = std::time(nullptr);
 	std::time_t chdate = parseDate(date, now);

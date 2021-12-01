@@ -8,7 +8,7 @@
 #ifndef SRC_MAIN_LOGINTREZOR_H_
 #define SRC_MAIN_LOGINTREZOR_H_
 
-json::String getTrezorAccountId(const json::StrViewA token, const json::StrViewA challenge_prefix);
+json::String getTrezorAccountId(std::string_view token, std::string_view challenge_prefix);
 
 
 

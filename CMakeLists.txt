@@ -13,8 +13,8 @@ add_compile_options(-std=c++17 -fPIC)
 
 add_subdirectory (src/imtjson/src/imtjson EXCLUDE_FROM_ALL)
 add_subdirectory (src/couchit/src/couchit EXCLUDE_FROM_ALL)
-add_subdirectory (src/simpleServer/src/simpleServer  EXCLUDE_FROM_ALL)
-add_subdirectory (src/simpleServer/src/rpc EXCLUDE_FROM_ALL)
+add_subdirectory (src/userver/ EXCLUDE_FROM_ALL)
+add_subdirectory (src/userver_jsonrpc/ EXCLUDE_FROM_ALL)
 add_subdirectory (src/main) 
 
 

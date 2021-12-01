@@ -14,8 +14,6 @@
 #include <openssl/bn.h>
 #include <openssl/ossl_typ.h>
 #include <openssl/rsa.h>
-#include <simpleServer/http_client.h>
-#include <simpleServer/http_headers.h>
 #include "loginApple.h"
 #include <atomic>
 #include <map>
@@ -24,9 +22,6 @@
 
 using json::String;
 using json::Value;
-using simpleServer::HttpClient;
-using simpleServer::newHttpsProvider;
-using simpleServer::SendHeaders;
 
 
 
@@ -46,13 +41,13 @@ int RSA_set0_key(RSA *r, BIGNUM *n, BIGNUM *e, BIGNUM *d) {
 #endif
 
 
-static KeySet loadAppleKeys() {
-	HttpClient httpc(StrViewA(), simpleServer::newHttpsProvider());
-	auto response = httpc.request("GET","https://appleid.apple.com/auth/keys", simpleServer::SendHeaders());
-	int code = response.getStatus();
+static KeySet loadAppleKeys(userver::HttpClient &httpc) {
+	auto response = httpc.GET("https://appleid.apple.com/auth/keys", {});
+	int code = response->getStatus();
 	KeySet ks;
 	if (code / 100 == 2) {
-		json::Value data = json::Value::parse(response.getBody());
+		auto &s = response->getResponse();
+		json::Value data = json::Value::parse([&]{return s.getChar();});
 		for (json::Value k : data["keys"]) {
 			auto pubKey = k["n"];
 			auto kid = k["kid"];
@@ -62,8 +57,8 @@ static KeySet loadAppleKeys() {
 			auto e = exp.getBinary(json::base64url);
 
 			RSAObject rsa(RSA_new());
-			BIGNUM * bnn = BN_bin2bn(n.data,n.length , NULL);
-			BIGNUM * bne = BN_bin2bn(e.data, e.length, NULL);
+			BIGNUM * bnn = BN_bin2bn(n.data(),n.length(), NULL);
+			BIGNUM * bne = BN_bin2bn(e.data(), e.length(), NULL);
 			RSA_set0_key(rsa.get(),bnn,bne,NULL);
 
 			json::PJWTCrypto jwt = new json::JWTCrypto_RS(rsa.release(), 256);
@@ -77,12 +72,12 @@ static KeySet loadAppleKeys() {
 static KeySetPtr appleKeySet;
 static std::mutex appleKeySetGuard;
 
-json::String getAppleAccountId(const json::StrViewA token) {
+json::String getAppleAccountId(userver::HttpClient &httpc, const std::string_view &token) {
 	KeySetPtr ks;
 	std::unique_lock lk(appleKeySetGuard);
 	ks = appleKeySet;
 	if (ks == nullptr) {
-		ks = KeySetPtr(new KeySet(loadAppleKeys()));
+		ks = KeySetPtr(new KeySet(loadAppleKeys(httpc)));
 		appleKeySet = ks;
 	}
 	lk.unlock();
@@ -95,7 +90,7 @@ json::String getAppleAccountId(const json::StrViewA token) {
 	json::PJWTCrypto jwt;
 	auto pkiter = ks->find(kid);
 	if (pkiter == ks->end()) {
-		ks = KeySetPtr(new KeySet(loadAppleKeys()));
+		ks = KeySetPtr(new KeySet(loadAppleKeys(httpc)));
 		pkiter = ks->find(kid);
 		if (pkiter == ks->end()) {
 			throw std::runtime_error("JWT token signed by an unknown key");

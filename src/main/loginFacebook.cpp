@@ -7,8 +7,6 @@
 
 
 #include <imtjson/string.h>
-#include <simpleServer/http_client.h>
-#include <simpleServer/http_headers.h>
 #include <imtjson/value.h>
 #include <shared/stringview.h>
 #include "loginFacebook.h"
@@ -17,18 +15,14 @@
 using json::Parser;
 using json::String;
 using json::Value;
-using simpleServer::HttpClient;
-using simpleServer::newHttpsProvider;
-using simpleServer::SendHeaders;
 
 
-
-json::String getFacebookAccountId(const json::StrViewA token) {
-	HttpClient httpc(StrViewA(), newHttpsProvider());
+json::String getFacebookAccountId(userver::HttpClient &httpc, const std::string_view &token) {
 	String url({"https://graph.facebook.com/me?access_token=",token,"&fields=email"});
-	auto response = httpc.request("GET",url,SendHeaders());
-	if (response.getStatus() == 200) {
-		Value resp = Value::parse(response.getBody());
+	auto resp = httpc.GET(url.str(), {});;
+	if (resp->getStatus() == 200) {
+		userver::Stream &s = resp->getResponse();
+		Value resp = Value::parse([&]{return s.getChar();});
 		json::String email = resp["email"].toString();
 		if (email.empty())  {
 			if (!resp["id"].defined()) throw std::runtime_error("Malformed facebook response");
@@ -36,6 +30,6 @@ json::String getFacebookAccountId(const json::StrViewA token) {
 		}
 		return email;
 	} else {
-		throw std::runtime_error("Failed to validate token: code "+std::to_string(response.getStatus()));
+		throw std::runtime_error("Failed to validate token: code "+std::to_string(resp->getStatus()));
 	}
 }

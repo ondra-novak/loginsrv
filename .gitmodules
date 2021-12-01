@@ -14,3 +14,9 @@
 	path = src/shared
 	url = https://github.com/ondra-novak/ondra_shared.git
 	branch = master
+[submodule "src/userver"]
+	path = src/userver
+	url = https://github.com/ondra-novak/userver
+[submodule "src/userver_jsonrpc"]
+	path = src/userver_jsonrpc
+	url = https://github.com/ondra-novak/userver_jsonrpc

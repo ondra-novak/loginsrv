@@ -8,8 +8,9 @@
 #ifndef SRC_MAIN_LOGINGOOGLE_H_
 #define SRC_MAIN_LOGINGOOGLE_H_
 
+#include <userver/http_client.h>
 
 
-json::String getGoogleAccountId(const json::StrViewA token);
+json::String getGoogleAccountId(userver::HttpClient &httpc, const std::string_view &token);
 
 #endif /* SRC_MAIN_LOGINGOOGLE_H_ */

@@ -8,7 +8,9 @@
 #ifndef SRC_MAIN_LOGINFACEBOOK_H_
 #define SRC_MAIN_LOGINFACEBOOK_H_
 
-json::String getFacebookAccountId(const json::StrViewA token);
+#include <userver/http_client.h>
+
+json::String getFacebookAccountId(userver::HttpClient &httpc, const std::string_view &token);
 
 
 

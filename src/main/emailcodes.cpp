@@ -46,19 +46,19 @@ unsigned int EmailCodes::generateCode(json::String email) {
 		return dupreq;
 	std::uniform_int_distribution<unsigned int> rndst(10000,99999);
 	int randomCode = rndst(rnd);
-	codes = codes.replace(email, Object
-			("exp",now+900)
-			("tries",0)
-			("code", randomCode));
+	codes = codes.replace(email, Object{
+		{"exp",now+900},
+		{"tries",0},
+		{"code", randomCode}});
 	db->put(doc.replace("codes",codes));
 	return randomCode;
 }
 
-bool EmailCodes::checkCode(json::String email, unsigned int code, bool nosuccessinv) {
+bool EmailCodes::checkCode(json::String email, unsigned int code) {
 	std::unique_lock _(lock);
 	auto now = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
 	Result items = db->createQuery(View::includeDocs).prefixString("email_codes").exec();
-	std::map<StrViewA, Value> mergmap;
+	std::map<std::string_view, Value> mergmap;
 	for (Row rw: items) {
 		Value codes = rw.doc["codes"];
 		for (Value x: codes) {
@@ -88,7 +88,7 @@ bool EmailCodes::checkCode(json::String email, unsigned int code, bool nosuccess
 	auto tries = found["tries"].getUInt();
 	if (found["code"].getUInt() == code && tries < 10) {
 		suc = true;
-		found = found.replace("tries",nosuccessinv?tries+1:999999);
+		found = found.replace("tries",999999);
 	} else {
 		found = found.replace("tries", tries+1);
 	}

@@ -18,7 +18,7 @@ public:
 	EmailCodes(const std::shared_ptr<couchit::CouchDB> &db);
 
 	unsigned int generateCode(json::String email);
-	bool checkCode(json::String email, unsigned int code, bool nosuccesinv);
+	bool checkCode(json::String email, unsigned int code);
 
 protected:
 	std::shared_ptr<couchit::CouchDB> db;
